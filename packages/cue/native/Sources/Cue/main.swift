@@ -34,7 +34,7 @@ struct RequestMetadata {
 
 private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
-private let suggestionRowHeight: CGFloat = 23
+private let suggestionRowHeight: CGFloat = 18
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
     max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
@@ -128,7 +128,7 @@ final class CuePanelController {
         hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(320, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(278, size.width), height: size.height))
         detailsHostingView.rootView = CueDetailView(description: visibleCompletions.first?.description ?? "")
         detailsHostingView.layoutSubtreeIfNeeded()
         let detailsSize = detailsHostingView.fittingSize
@@ -348,24 +348,24 @@ struct CuePanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 1) {
+        VStack(spacing: 0) {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
-                HStack(spacing: 7) {
+                HStack(spacing: 4) {
                     CueIcon(icon: completion.icon, kind: completion.kind)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 14, height: 14)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 5)
-                .frame(width: 312, height: 22)
+                .padding(.horizontal, 4)
+                .frame(width: 272, height: suggestionRowHeight)
                 .foregroundStyle(Color.white)
-                .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+                .background(index == selectedIndex ? Color(red: 0.16, green: 0.36, blue: 0.75) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
             }
         }
-        .padding(4)
-        .frame(width: 320)
-        .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
+        .padding(3)
+        .frame(width: 278)
+        .background(Color(red: 0.13, green: 0.13, blue: 0.14), in: RoundedRectangle(cornerRadius: 5))
+        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(red: 0.22, green: 0.22, blue: 0.23), lineWidth: 1))
     }
 
     private func suggestionLabel(_ completion: Completion, selected: Bool) -> some View {
@@ -374,13 +374,13 @@ struct CuePanelView: View {
         let remainder = String(completion.name.dropFirst(prefixLength))
         let matchedText = Text(matched)
             .fontWeight(.bold)
-            .foregroundColor(Color(red: 0.78, green: 0.88, blue: 1.0))
+            .foregroundColor(Color(red: 0.98, green: 0.82, blue: 0.46))
         let remainderText = Text(remainder)
             .foregroundColor(selected ? .white : Color.white.opacity(0.68))
         let hintText = Text(completion.argumentHint.map { "  \($0)" } ?? "")
             .foregroundColor(Color.white.opacity(0.48))
         return (matchedText + remainderText + hintText)
-            .font(.system(size: 10, weight: selected ? .semibold : .regular, design: .monospaced))
+            .font(.system(size: 9.5, weight: selected ? .medium : .regular, design: .monospaced))
             .lineLimit(1)
     }
 }
