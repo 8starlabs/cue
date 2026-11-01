@@ -4,7 +4,7 @@ A personal prototype for Fig-style command suggestions in Apple Terminal. It use
 
 ## Current prototype
 
-The Node completion engine loads published Fig specs and returns matching subcommands, options, and argument suggestions as JSON. It includes basic command/argument generator support. A first zsh widget is also included: when sourced, it uses the engine on Tab and offers matching results through zsh's completion menu.
+The Node completion engine loads published Fig specs and returns matching subcommands, options, and argument suggestions as JSON. It includes basic command/argument generator support. The zsh integration shows a short live suggestion line as you type after a command and uses Tab to open zsh's selection menu. The native floating popup is still to come.
 
 ## Try the engine
 

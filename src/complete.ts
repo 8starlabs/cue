@@ -91,7 +91,7 @@ async function runGenerator(generator: FigGenerator, cwd: string, context: strin
   const command = Array.isArray(generator.script) ? generator.script[0] : generator.script;
   const args = Array.isArray(generator.script) ? generator.script.slice(1) : [];
   try {
-    const { stdout } = await execFileAsync(command, args, { cwd, timeout: 1200, maxBuffer: 256_000 });
+    const { stdout } = await execFileAsync(command, args, { cwd, timeout: 300, maxBuffer: 256_000 });
     return generator.postProcess ? generator.postProcess(stdout, context) : stdout.split(/\r?\n/).filter(Boolean).map((name) => ({ name }));
   } catch {
     return [];
