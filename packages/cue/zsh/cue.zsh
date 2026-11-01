@@ -13,6 +13,7 @@ fi
 typeset -g KEYTIMEOUT=1
 
 typeset -gi CUE_SELECTED_INDEX=0
+typeset -gi CUE_USER_SELECTED=0
 typeset -ga CUE_MATCHES
 typeset -g CUE_MATCHES_BUFFER=''
 typeset -g CUE_MATCHES_CWD=''
@@ -94,6 +95,7 @@ _cue_send_hide() {
 
 _cue_dismiss_widget() {
   CUE_DISMISSED_BUFFER="$BUFFER"
+  CUE_USER_SELECTED=0
   _cue_send_hide
   zle -M ''
 }
@@ -103,6 +105,7 @@ bindkey '^[' cue_dismiss_widget
 _cue_move_selection() {
   local direction="$1"
   if [[ "$BUFFER" == *[[:space:]]* ]] && _cue_matches; then
+    CUE_USER_SELECTED=1
     if [[ "$direction" == down ]]; then
       CUE_SELECTED_INDEX=$(( (CUE_SELECTED_INDEX + 1) % ${#CUE_MATCHES} ))
     else
@@ -145,6 +148,7 @@ _cue_complete_selection() {
   BUFFER="${prefix}${selected}${trailing}"
   CURSOR=$((${#prefix} + ${#selected}))
   CUE_SELECTED_INDEX=0
+  CUE_USER_SELECTED=0
   if [[ "$BUFFER" == cd[[:space:]]* || "$selected" == */ ]]; then
     # Directory suggestions can reveal another useful layer; let Enter accept
     # the next suggestion until the user finishes the argument with a space.
@@ -175,7 +179,7 @@ _cue_accept_widget() {
     zle .accept-line
     return
   fi
-  if [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
+  if (( CUE_USER_SELECTED )) && [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
     _cue_dismiss_widget
     return
   fi
@@ -202,6 +206,7 @@ _cue_live_watch() {
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
     CUE_SELECTED_INDEX=0
+    CUE_USER_SELECTED=0
     CUE_DISMISSED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]] || CUE_ACCEPTED_BUFFER=''
   fi

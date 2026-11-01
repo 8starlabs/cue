@@ -78,6 +78,7 @@ final class CuePanelController {
     private let model: CueModel
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
+    private var hasManualSelection = false
     private var listOrigin = NSPoint.zero
     private var activeVisibleFrame: CGRect?
     private var latestMetadata: RequestMetadata?
@@ -95,7 +96,7 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, description: "", descriptionAtBottom: false))
+        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, description: "", descriptionAtBottom: false, hasManualSelection: false))
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -110,7 +111,7 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        detailsHostingView = NSHostingView(rootView: CueDetailView(description: ""))
+        detailsHostingView = NSHostingView(rootView: CueDetailView(description: "", hasManualSelection: false))
         detailsPanel.contentView = detailsHostingView
         detailsPanel.isOpaque = false
         detailsPanel.backgroundColor = .clear
@@ -129,6 +130,7 @@ final class CuePanelController {
 
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
         selectedIndex = 0
+        hasManualSelection = false
         latestMetadata = metadata
         renderPanel()
         let combinedSize = combinedPanelSize
@@ -148,6 +150,7 @@ final class CuePanelController {
         detailsPanel.orderOut(nil)
         visibleCompletions = []
         selectedIndex = 0
+        hasManualSelection = false
         latestMetadata = nil
         unregisterLayoutHotKey()
     }
@@ -155,6 +158,7 @@ final class CuePanelController {
     func select(_ index: Int) {
         guard !visibleCompletions.isEmpty else { return }
         selectedIndex = min(max(0, index), visibleCompletions.count - 1)
+        hasManualSelection = true
         renderPanel()
         if !descriptionAtBottom { positionDetailsPanel() }
     }
@@ -174,12 +178,13 @@ final class CuePanelController {
             completions: visibleCompletions,
             selectedIndex: selectedIndex,
             description: description,
-            descriptionAtBottom: descriptionAtBottom
+            descriptionAtBottom: descriptionAtBottom,
+            hasManualSelection: hasManualSelection
         )
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
         panel.setContentSize(NSSize(width: max(descriptionAtBottom ? 450 : 250, size.width), height: size.height))
-        detailsHostingView.rootView = CueDetailView(description: description)
+        detailsHostingView.rootView = CueDetailView(description: description, hasManualSelection: hasManualSelection)
         detailsHostingView.layoutSubtreeIfNeeded()
         detailsPanel.setContentSize(detailsHostingView.fittingSize)
     }
@@ -421,6 +426,7 @@ struct CuePanelView: View {
     let selectedIndex: Int
     let description: String
     let descriptionAtBottom: Bool
+    let hasManualSelection: Bool
 
     private var visibleSuggestions: [(offset: Int, element: Completion)] {
         let start = suggestionWindowStart(total: completions.count, selected: selectedIndex)
@@ -453,7 +459,9 @@ struct CuePanelView: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     HStack(spacing: 8) {
-                        Text("↵ dismiss")
+                        if hasManualSelection {
+                            Text("↵ dismiss")
+                        }
                         Text("⌘I layout")
                     }
                     .font(.custom("Menlo-Regular", size: 8))
@@ -490,6 +498,7 @@ struct CuePanelView: View {
 
 struct CueDetailView: View {
     let description: String
+    let hasManualSelection: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -502,7 +511,9 @@ struct CueDetailView: View {
             HStack {
                 Spacer(minLength: 0)
                 HStack(spacing: 8) {
-                    Text("↵ dismiss")
+                    if hasManualSelection {
+                        Text("↵ dismiss")
+                    }
                     Text("⌘I layout")
                 }
                 .font(.custom("Menlo-Regular", size: 8))
