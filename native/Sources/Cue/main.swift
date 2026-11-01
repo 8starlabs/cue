@@ -157,26 +157,32 @@ final class CuePanelController {
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
-        let fallbackRow = min(lines - 1, max(0, lines / 2))
+        let fallbackRow = lines - 2
         let column = absoluteColumn % columns
         var x: CGFloat
         var y: CGFloat
-        if let focusedElement, let caret = axCaretRect(focusedElement),
+        if let windowRect, metadata.terminalRow > 0, metadata.terminalColumn > 0 {
+            // The shell queries Terminal's live grid position; prefer it over
+            // AX text-range bounds, which can describe the whole text surface.
+            let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
+            let cellWidth = textRect.width / CGFloat(columns)
+            let cellHeight = textRect.height / CGFloat(lines)
+            let terminalColumn = min(columns - 1, max(0, metadata.terminalColumn - 1))
+            let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
+            x = textRect.minX + CGFloat(terminalColumn) * cellWidth
+            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight + 3
+            y = screenHeight - axY - panelSize.height
+        } else if let focusedElement, let caret = axCaretRect(focusedElement),
            caret.width < 8, caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
            windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
             x = caret.minX
             y = screenHeight - caret.maxY - panelSize.height - 3
         } else if let windowRect {
-            // Terminal doesn't expose caret bounds on every macOS release. Its
-            // active input line is generally near the bottom of the content area.
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
-            let hasTerminalCursor = metadata.terminalRow > 0 && metadata.terminalColumn > 0
-            let terminalColumn = hasTerminalCursor ? metadata.terminalColumn - 1 : column
-            let terminalRow = hasTerminalCursor ? min(lines - 1, metadata.terminalRow - 1) : fallbackRow
-            x = textRect.minX + CGFloat(terminalColumn) * cellWidth
-            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight + 3
+            x = textRect.minX + CGFloat(column) * cellWidth
+            let axY = textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight + 3
             y = screenHeight - axY - panelSize.height
         } else {
             let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
