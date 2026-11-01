@@ -24,6 +24,7 @@ struct RequestMetadata {
     let promptWidth: Int
     let cwd: String
     let line: String
+    let action: String
 }
 
 final class CueModel: ObservableObject {
@@ -59,11 +60,13 @@ final class CuePanelController {
     private let panel: NSPanel
     private let hostingView: NSHostingView<CuePanelView>
     private let model: CueModel
+    private var visibleCompletions: [Completion] = []
+    private var selectedIndex = 0
 
     init(model: CueModel) {
         self.model = model
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 250),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -86,10 +89,12 @@ final class CuePanelController {
         }
 
         let visible = Array(completions.prefix(7))
-        hostingView.rootView = CuePanelView(completions: visible, selectedIndex: 0)
+        visibleCompletions = visible
+        selectedIndex = 0
+        hostingView.rootView = CuePanelView(completions: visible, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(410, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(390, size.width), height: size.height))
         if let origin = popupOrigin(metadata: metadata, panelSize: panel.frame.size) {
             panel.setFrameOrigin(origin)
         }
@@ -98,6 +103,15 @@ final class CuePanelController {
 
     func hide() {
         panel.orderOut(nil)
+        visibleCompletions = []
+        selectedIndex = 0
+    }
+
+    func select(_ index: Int) {
+        guard !visibleCompletions.isEmpty else { return }
+        selectedIndex = min(max(0, index), visibleCompletions.count - 1)
+        hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
+        hostingView.layoutSubtreeIfNeeded()
     }
 
     private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> NSPoint? {
@@ -213,39 +227,39 @@ struct CuePanelView: View {
             ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
                 HStack(spacing: 10) {
                     CueIcon(icon: completion.icon, kind: completion.kind)
-                        .frame(width: 22, height: 22)
+                    .frame(width: 18, height: 18)
                     Text(completion.name)
-                        .font(.system(size: 14, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
+                        .font(.system(size: 12, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
                         .lineLimit(1)
                     Spacer(minLength: 10)
                     if let description = completion.description, index != selectedIndex {
                         Text(description)
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
                             .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
                             .lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 9)
-                .frame(height: 31)
+                .frame(height: 26)
                 .foregroundStyle(Color.white)
                 .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             }
             Divider().padding(.top, 3)
             HStack {
-                Text(selected?.description ?? "Suggestions")
-                    .font(.system(size: 12).italic())
+                Text(selected?.description ?? "↑↓ to navigate")
+                    .font(.system(size: 10).italic())
                     .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
                     .lineLimit(1)
                 Spacer()
                 Text("Enter to complete")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(Color(red: 0.70, green: 0.70, blue: 0.72))
             }
             .padding(.horizontal, 9)
-            .frame(height: 28)
+            .frame(height: 23)
         }
         .padding(6)
-        .frame(width: 460)
+        .frame(width: 420)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
     }
@@ -257,7 +271,7 @@ struct CueIcon: View {
 
     var body: some View {
         if let icon, !icon.hasPrefix("fig://") {
-            Text(icon).font(.system(size: 18))
+            Text(icon).font(.system(size: 15))
         } else if let image = figImage(icon) {
             Image(nsImage: image).resizable().scaledToFit().padding(1)
         } else {
@@ -265,7 +279,7 @@ struct CueIcon: View {
             let style = iconStyle(type: type, kind: kind)
             RoundedRectangle(cornerRadius: 6)
                 .fill(style.color)
-                .overlay(Image(systemName: style.symbol).font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+                .overlay(Image(systemName: style.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(.white))
         }
     }
 
@@ -432,14 +446,19 @@ final class CueService {
         guard let separator = bytes.firstIndex(of: 0),
               let header = String(bytes: bytes[..<separator], encoding: .utf8),
               let line = String(bytes: bytes[(separator + 1)...], encoding: .utf8) else { return nil }
-        let fields = header.split(separator: "\t", maxSplits: 4, omittingEmptySubsequences: false)
-        guard fields.count == 5,
+        let fields = header.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
+        guard fields.count >= 5,
               let cursor = Int(fields[0]), let columns = Int(fields[1]),
               let lines = Int(fields[2]), let promptWidth = Int(fields[3]) else { return nil }
-        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, cwd: String(fields[4]), line: line)
+        let action = fields.count > 5 ? String(fields[5]) : ""
+        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, cwd: String(fields[4]), line: line, action: action)
     }
 
     private func submit(_ metadata: RequestMetadata) {
+        if metadata.action.hasPrefix("select:"), let index = Int(metadata.action.dropFirst("select:".count)) {
+            DispatchQueue.main.async { self.panelController.select(index) }
+            return
+        }
         engineQueue.async { [weak self] in
             guard let self else { return }
             self.nextID += 1

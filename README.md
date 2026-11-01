@@ -4,7 +4,7 @@ A personal prototype for IDE-style command suggestions in Apple Terminal. It use
 
 ## Current prototype
 
-The Node completion worker stays loaded while Cue is running, avoiding a cold Node startup on every keystroke. The zsh hook sends line updates asynchronously over a local Unix socket. Enter inserts the first suggestion; Tab opens zsh's selection menu.
+The Node completion worker stays loaded while Cue is running, avoiding a cold Node startup on every keystroke. The zsh hook sends line updates asynchronously over a local Unix socket. Use Up/Down to highlight suggestions, Enter to insert the highlighted suggestion, or Tab to open zsh's selection menu.
 
 ## Try the engine
 
@@ -27,7 +27,7 @@ pnpm build:app
 source "$PWD/zsh/cue.zsh"
 ```
 
-The helper launches Cue and prompts for macOS Accessibility access so it can place the popup over Terminal. Then type `git ch`; suggestions should appear while typing. Press Enter to insert the first suggestion, or Tab to select through zsh's menu.
+The helper launches Cue and prompts for macOS Accessibility access so it can place the popup over Terminal. Then type `git ch`; suggestions should appear while typing. Use Up/Down and press Enter to insert the highlighted suggestion, or use Tab to select through zsh's menu.
 
 ## Planned pieces
 
