@@ -436,7 +436,7 @@ struct CuePanelView: View {
         VStack(spacing: 0) {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                 HStack(spacing: 4) {
-                    CueIcon(icon: completion.icon, kind: completion.kind)
+                    CueIcon(icon: completion.icon, kind: completion.kind, name: completion.name)
                         .frame(width: 18, height: 18)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
@@ -529,6 +529,7 @@ struct CueDetailView: View {
 struct CueIcon: View {
     let icon: String?
     let kind: String
+    let name: String
 
     var body: some View {
         if let icon, !icon.hasPrefix("fig://") {
@@ -537,14 +538,10 @@ struct CueIcon: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let image = figImage(icon) {
+        } else if let image = figImage(icon, kind: kind, name: name) {
             Image(nsImage: image).resizable().scaledToFit().padding(1)
         } else {
-            let type = iconType(icon)
-            let style = iconStyle(type: type, kind: kind)
-            RoundedRectangle(cornerRadius: 6)
-                .fill(style.color)
-                .overlay(Image(systemName: style.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(.white))
+            EmptyView()
         }
     }
 
@@ -554,29 +551,25 @@ struct CueIcon: View {
         return type
     }
 
-    private func figImage(_ value: String?) -> NSImage? {
-        let type = iconType(value)
-        guard !type.isEmpty else { return nil }
-        for ext in ["png", "svg"] {
-            let url = Bundle.main.bundleURL
-                .appendingPathComponent("Contents/Resources/FigIcons", isDirectory: true)
-                .appendingPathComponent("\(type).\(ext)")
-            if let image = NSImage(contentsOf: url) { return image }
+    private func figImage(_ value: String?, kind: String, name: String) -> NSImage? {
+        let explicitType = iconType(value)
+        let fallbackType: String
+        switch kind {
+        case "command": fallbackType = "command"
+        case "option": fallbackType = "option"
+        default: fallbackType = name.hasSuffix("/") ? "default-folder-icon" : "default-file-icon"
+        }
+
+        let types = explicitType.isEmpty ? [fallbackType] : [explicitType, fallbackType]
+        for type in types {
+            for ext in ["png", "svg"] {
+                let url = Bundle.main.bundleURL
+                    .appendingPathComponent("Contents/Resources/FigIcons", isDirectory: true)
+                    .appendingPathComponent("\(type).\(ext)")
+                if let image = NSImage(contentsOf: url) { return image }
+            }
         }
         return nil
-    }
-
-    private func iconStyle(type: String, kind: String) -> (symbol: String, color: Color) {
-        switch type {
-        case "git": return ("arrow.branch", Color(red: 0.93, green: 0.32, blue: 0.22))
-        case "node", "package": return ("shippingbox.fill", Color(red: 0.83, green: 0.37, blue: 0.25))
-        case "option", "question": return ("questionmark", Color(red: 0.30, green: 0.70, blue: 0.38))
-        case "file", "folder": return ("doc.fill", Color(red: 0.35, green: 0.55, blue: 0.83))
-        default:
-            if kind == "command" { return ("dollarsign", Color(red: 0.56, green: 0.28, blue: 0.78)) }
-            if kind == "option" { return ("questionmark", Color(red: 0.30, green: 0.70, blue: 0.38)) }
-            return ("terminal.fill", Color(red: 0.35, green: 0.45, blue: 0.62))
-        }
     }
 }
 
