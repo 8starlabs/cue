@@ -35,7 +35,7 @@ struct RequestMetadata {
 
 private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
-private let suggestionRowHeight: CGFloat = 20
+private let suggestionRowHeight: CGFloat = 24
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
     max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
@@ -432,7 +432,7 @@ struct CuePanelView: View {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                 HStack(spacing: 4) {
                     CueIcon(icon: completion.icon, kind: completion.kind)
-                        .frame(width: 15, height: 15)
+                        .frame(width: 18, height: 18)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
                 }
@@ -448,12 +448,12 @@ struct CuePanelView: View {
                     .padding(.horizontal, 3)
                 HStack(alignment: .center, spacing: 8) {
                     Text(description.isEmpty ? "No additional description" : description)
-                        .font(.system(size: 10).italic())
+                        .font(.system(size: 12).italic())
                         .foregroundStyle(Color.white.opacity(0.72))
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("⌘I")
-                        .font(.custom("SFMono-Regular", size: 8))
+                        .font(.custom("SFMono-Regular", size: 9))
                         .foregroundStyle(Color.white.opacity(0.46))
                 }
                 .padding(.horizontal, 5)
@@ -479,7 +479,7 @@ struct CuePanelView: View {
         let hintText = Text(completion.argumentHint.map { "  \($0)" } ?? "")
             .foregroundColor(Color.white.opacity(0.48))
         return (matchedText + remainderText + hintText)
-            .font(.custom(selected ? "SFMono-Medium" : "SFMono-Regular", size: 9.5))
+            .font(.custom(selected ? "SFMono-Medium" : "SFMono-Regular", size: 12))
             .lineLimit(1)
     }
 }
@@ -490,7 +490,7 @@ struct CueDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(description.isEmpty ? "No additional description" : description)
-                .font(.system(size: 9).italic())
+                .font(.system(size: 11).italic())
                 .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
                 .lineLimit(6)
                 .fixedSize(horizontal: false, vertical: true)
@@ -498,7 +498,7 @@ struct CueDetailView: View {
             HStack {
                 Spacer(minLength: 0)
                 Text("⌘I")
-                    .font(.custom("SFMono-Regular", size: 8))
+                    .font(.custom("SFMono-Regular", size: 9))
                     .foregroundStyle(Color.white.opacity(0.46))
             }
         }
