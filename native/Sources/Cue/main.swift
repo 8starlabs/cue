@@ -569,10 +569,13 @@ final class CueService {
         guard fields.count >= 5,
               let cursor = Int(fields[0]), let columns = Int(fields[1]),
               let lines = Int(fields[2]), let promptWidth = Int(fields[3]) else { return nil }
-        let terminalRow = fields.count > 5 ? Int(fields[5]) ?? 0 : 0
-        let terminalColumn = fields.count > 6 ? Int(fields[6]) ?? 0 : 0
-        let action = fields.count > 7 ? String(fields[7]) : ""
-        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[4]), line: line, action: action)
+        let hasCursorPosition = fields.count >= 7
+        let terminalRow = hasCursorPosition ? Int(fields[4]) ?? 0 : 0
+        let terminalColumn = hasCursorPosition ? Int(fields[5]) ?? 0 : 0
+        let cwdIndex = hasCursorPosition ? 6 : 4
+        let actionIndex = hasCursorPosition ? 7 : 5
+        let action = fields.indices.contains(actionIndex) ? String(fields[actionIndex]) : ""
+        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[cwdIndex]), line: line, action: action)
     }
 
     private func submit(_ metadata: RequestMetadata) {
