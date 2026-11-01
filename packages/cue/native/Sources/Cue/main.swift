@@ -35,7 +35,7 @@ struct RequestMetadata {
 
 private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
-private let suggestionRowHeight: CGFloat = 20
+private let suggestionRowHeight: CGFloat = 18
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
     max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
@@ -435,13 +435,13 @@ struct CuePanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
-                HStack(spacing: 4) {
+                HStack(spacing: 3) {
                     CueIcon(icon: completion.icon, kind: completion.kind, name: completion.name)
-                        .frame(width: 18, height: 18)
+                        .frame(width: 16, height: 16)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 3)
+                .padding(.horizontal, 2)
                 .frame(width: descriptionAtBottom ? 396 : 246, height: suggestionRowHeight)
                 .foregroundStyle(Color.white)
                 .background(index == selectedIndex ? Color(red: 0.18, green: 0.37, blue: 0.75) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
@@ -453,7 +453,7 @@ struct CuePanelView: View {
                     .padding(.horizontal, 3)
                 HStack(alignment: .center, spacing: 8) {
                     Text(description.isEmpty ? "No additional description" : description)
-                        .font(.system(size: 12).italic())
+                        .font(.system(size: 11).italic())
                         .foregroundStyle(Color.white.opacity(0.72))
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -463,15 +463,15 @@ struct CuePanelView: View {
                         }
                         Text("(⌘I)")
                     }
-                    .font(.custom("Menlo-Regular", size: 8))
+                    .font(.custom("Menlo-Regular", size: 7.5))
                     .foregroundStyle(Color.white.opacity(0.46))
                 }
-                .padding(.horizontal, 5)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 3)
                 .frame(width: 396, alignment: .leading)
             }
         }
-        .padding(2)
+        .padding(1.5)
         .frame(width: descriptionAtBottom ? 400 : 250)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 5))
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(red: 0.23, green: 0.23, blue: 0.24), lineWidth: 1))
@@ -491,8 +491,8 @@ struct CuePanelView: View {
             Text(completion.argumentHint.map { "  \($0)" } ?? "")
                 .foregroundColor(Color.white.opacity(0.48))
         }
-            .font(.custom(selected ? "Menlo-Bold" : "Menlo-Regular", size: 12))
-            .tracking(0.35)
+            .font(.custom(selected ? "Menlo-Bold" : "Menlo-Regular", size: 11))
+            .tracking(0.3)
             .lineLimit(1)
     }
 }
@@ -504,7 +504,7 @@ struct CueDetailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(description.isEmpty ? "No additional description" : description)
-                .font(.system(size: 11).italic())
+                .font(.system(size: 10).italic())
                 .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
                 .lineLimit(6)
                 .fixedSize(horizontal: false, vertical: true)
@@ -517,11 +517,11 @@ struct CueDetailView: View {
                     }
                     Text("(⌘I)")
                 }
-                .font(.custom("Menlo-Regular", size: 8))
+                .font(.custom("Menlo-Regular", size: 7.5))
                 .foregroundStyle(Color.white.opacity(0.46))
             }
         }
-        .padding(8)
+        .padding(7)
         .frame(width: 260, alignment: .topLeading)
         .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
@@ -536,7 +536,7 @@ struct CueIcon: View {
     var body: some View {
         if let icon, !icon.hasPrefix("fig://") {
             Text(icon)
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
