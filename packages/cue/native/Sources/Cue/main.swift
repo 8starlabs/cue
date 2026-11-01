@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import Carbon.HIToolbox
 import SwiftUI
 import Darwin
 
@@ -79,6 +80,10 @@ final class CuePanelController {
     private var selectedIndex = 0
     private var listOrigin = NSPoint.zero
     private var activeVisibleFrame: CGRect?
+    private var latestMetadata: RequestMetadata?
+    private var descriptionAtBottom = false
+    private var layoutHotKey: EventHotKeyRef?
+    private var hotKeyHandler: EventHandlerRef?
     private let panelGap: CGFloat = 4
     var isVisible: Bool { panel.isVisible }
 
@@ -90,7 +95,7 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0))
+        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, description: "", descriptionAtBottom: false))
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -118,29 +123,24 @@ final class CuePanelController {
     func show(_ completions: [Completion], metadata: RequestMetadata) {
         guard !completions.isEmpty,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
-            panel.orderOut(nil)
-            detailsPanel.orderOut(nil)
+            hide()
             return
         }
 
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
         selectedIndex = 0
-        hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
-        hostingView.layoutSubtreeIfNeeded()
-        let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(250, size.width), height: size.height))
-        detailsHostingView.rootView = CueDetailView(description: visibleCompletions.first?.description ?? "")
-        detailsHostingView.layoutSubtreeIfNeeded()
-        let detailsSize = detailsHostingView.fittingSize
-        detailsPanel.setContentSize(detailsSize)
-        let combinedSize = NSSize(width: panel.frame.width + panelGap + detailsPanel.frame.width, height: panel.frame.height)
+        latestMetadata = metadata
+        renderPanel()
+        let combinedSize = combinedPanelSize
         if let origin = popupOrigin(metadata: metadata, panelSize: combinedSize) {
             listOrigin = origin
             panel.setFrameOrigin(listOrigin)
-            positionDetailsPanel()
+            if !descriptionAtBottom { positionDetailsPanel() }
         }
         panel.orderFrontRegardless()
-        detailsPanel.orderFrontRegardless()
+        if descriptionAtBottom { detailsPanel.orderOut(nil) }
+        else { detailsPanel.orderFrontRegardless() }
+        registerLayoutHotKey()
     }
 
     func hide() {
@@ -148,17 +148,95 @@ final class CuePanelController {
         detailsPanel.orderOut(nil)
         visibleCompletions = []
         selectedIndex = 0
+        latestMetadata = nil
+        unregisterLayoutHotKey()
     }
 
     func select(_ index: Int) {
         guard !visibleCompletions.isEmpty else { return }
         selectedIndex = min(max(0, index), visibleCompletions.count - 1)
-        hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
+        renderPanel()
+        if !descriptionAtBottom { positionDetailsPanel() }
+    }
+
+    private var combinedPanelSize: NSSize {
+        NSSize(
+            width: panel.frame.width + (descriptionAtBottom ? 0 : panelGap + detailsPanel.frame.width),
+            height: panel.frame.height
+        )
+    }
+
+    private func renderPanel() {
+        let description = visibleCompletions.indices.contains(selectedIndex)
+            ? visibleCompletions[selectedIndex].description ?? ""
+            : ""
+        hostingView.rootView = CuePanelView(
+            completions: visibleCompletions,
+            selectedIndex: selectedIndex,
+            description: description,
+            descriptionAtBottom: descriptionAtBottom
+        )
         hostingView.layoutSubtreeIfNeeded()
-        detailsHostingView.rootView = CueDetailView(description: visibleCompletions[selectedIndex].description ?? "")
+        let size = hostingView.fittingSize
+        panel.setContentSize(NSSize(width: max(descriptionAtBottom ? 450 : 250, size.width), height: size.height))
+        detailsHostingView.rootView = CueDetailView(description: description)
         detailsHostingView.layoutSubtreeIfNeeded()
         detailsPanel.setContentSize(detailsHostingView.fittingSize)
-        positionDetailsPanel()
+    }
+
+    private func toggleDescriptionLayout() {
+        guard panel.isVisible, !visibleCompletions.isEmpty else { return }
+        descriptionAtBottom.toggle()
+        renderPanel()
+        if let latestMetadata,
+           let origin = popupOrigin(metadata: latestMetadata, panelSize: combinedPanelSize) {
+            listOrigin = origin
+            panel.setFrameOrigin(origin)
+        }
+        if descriptionAtBottom {
+            detailsPanel.orderOut(nil)
+        } else {
+            positionDetailsPanel()
+            detailsPanel.orderFrontRegardless()
+        }
+        panel.orderFrontRegardless()
+    }
+
+    private func registerLayoutHotKey() {
+        guard layoutHotKey == nil else { return }
+        let hotKeyID = EventHotKeyID(signature: OSType(0x43554531), id: 1)
+        if hotKeyHandler == nil {
+            var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            let callback: EventHandlerUPP = { _, event, userData in
+                guard let event, let userData else { return noErr }
+                var pressedHotKey = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &pressedHotKey
+                )
+                guard status == noErr, pressedHotKey.id == 1 else { return noErr }
+                let controller = Unmanaged<CuePanelController>.fromOpaque(userData).takeUnretainedValue()
+                DispatchQueue.main.async { controller.toggleDescriptionLayout() }
+                return noErr
+            }
+            InstallEventHandler(
+                GetApplicationEventTarget(), callback, 1, &eventType,
+                Unmanaged.passUnretained(self).toOpaque(), &hotKeyHandler
+            )
+        }
+        RegisterEventHotKey(UInt32(kVK_ANSI_I), UInt32(cmdKey), hotKeyID, GetApplicationEventTarget(), 0, &layoutHotKey)
+    }
+
+    private func unregisterLayoutHotKey() {
+        if let layoutHotKey {
+            UnregisterEventHotKey(layoutHotKey)
+            self.layoutHotKey = nil
+        }
     }
 
     private func positionDetailsPanel() {
@@ -341,6 +419,8 @@ final class CuePanelController {
 struct CuePanelView: View {
     let completions: [Completion]
     let selectedIndex: Int
+    let description: String
+    let descriptionAtBottom: Bool
 
     private var visibleSuggestions: [(offset: Int, element: Completion)] {
         let start = suggestionWindowStart(total: completions.count, selected: selectedIndex)
@@ -357,13 +437,32 @@ struct CuePanelView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 3)
-                .frame(width: 246, height: suggestionRowHeight)
+                .frame(width: descriptionAtBottom ? 446 : 246, height: suggestionRowHeight)
                 .foregroundStyle(Color.white)
                 .background(index == selectedIndex ? Color(red: 0.18, green: 0.37, blue: 0.75) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
             }
+            if descriptionAtBottom {
+                Rectangle()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(height: 1)
+                    .padding(.horizontal, 3)
+                HStack(alignment: .center, spacing: 8) {
+                    Text(description.isEmpty ? "No additional description" : description)
+                        .font(.system(size: 10).italic())
+                        .foregroundStyle(Color.white.opacity(0.72))
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("⌘I")
+                        .font(.custom("SFMono-Regular", size: 8))
+                        .foregroundStyle(Color.white.opacity(0.46))
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 4)
+                .frame(width: 446, alignment: .leading)
+            }
         }
         .padding(2)
-        .frame(width: 250)
+        .frame(width: descriptionAtBottom ? 450 : 250)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 5))
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(red: 0.23, green: 0.23, blue: 0.24), lineWidth: 1))
     }
@@ -389,16 +488,24 @@ struct CueDetailView: View {
     let description: String
 
     var body: some View {
-        Text(description.isEmpty ? "No additional description" : description)
-            .font(.system(size: 9).italic())
-            .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
-            .lineLimit(6)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(8)
-            .frame(width: 260, alignment: .topLeading)
-            .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
+        VStack(alignment: .leading, spacing: 6) {
+            Text(description.isEmpty ? "No additional description" : description)
+                .font(.system(size: 9).italic())
+                .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
+                .lineLimit(6)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Spacer(minLength: 0)
+                Text("⌘I")
+                    .font(.custom("SFMono-Regular", size: 8))
+                    .foregroundStyle(Color.white.opacity(0.46))
+            }
+        }
+        .padding(8)
+        .frame(width: 260, alignment: .topLeading)
+        .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
     }
 }
 
