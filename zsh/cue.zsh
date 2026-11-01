@@ -70,7 +70,6 @@ _cue_matches() {
   [[ -f "$engine" ]] || return 1
   while IFS= read -r -d '' name && IFS= read -r -d '' description; do
     CUE_MATCHES+=("$name")
-    (( ${#CUE_MATCHES} >= 7 )) && break
   done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
   (( ${#CUE_MATCHES} > 0 ))
 }
@@ -126,7 +125,6 @@ _cue_accept_widget() {
     local name description
     while IFS= read -r -d '' name && IFS= read -r -d '' description; do
       matches+=("$name")
-      (( ${#matches} >= 7 )) && break
     done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
     if (( CUE_SELECTED_INDEX >= ${#matches} )); then CUE_SELECTED_INDEX=0; fi
     selected="${matches[$(( CUE_SELECTED_INDEX + 1 ))]}"

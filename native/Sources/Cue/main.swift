@@ -30,6 +30,12 @@ struct RequestMetadata {
     let action: String
 }
 
+private let maximumVisibleSuggestions = 7
+
+private func suggestionWindowStart(total: Int, selected: Int) -> Int {
+    max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
+}
+
 final class CueModel: ObservableObject {
     @Published var completions: [Completion] = []
     @Published var selectedIndex = 0
@@ -112,14 +118,13 @@ final class CuePanelController {
             return
         }
 
-        let visible = Array(completions.prefix(7))
-        visibleCompletions = visible
+        visibleCompletions = Array(completions.prefix(12))
         selectedIndex = 0
-        hostingView.rootView = CuePanelView(completions: visible, selectedIndex: selectedIndex)
+        hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
         panel.setContentSize(NSSize(width: max(215, size.width), height: size.height))
-        detailsHostingView.rootView = CueDetailView(description: visible.first?.description ?? "")
+        detailsHostingView.rootView = CueDetailView(description: visibleCompletions.first?.description ?? "")
         detailsHostingView.layoutSubtreeIfNeeded()
         let detailsSize = detailsHostingView.fittingSize
         detailsPanel.setContentSize(detailsSize)
@@ -154,7 +159,8 @@ final class CuePanelController {
 
     private func positionDetailsPanel() {
         let listTop = listOrigin.y + panel.frame.height - 6
-        let selectedRowTop = listTop - CGFloat(selectedIndex) * 26
+        let selectedRow = selectedIndex - suggestionWindowStart(total: visibleCompletions.count, selected: selectedIndex)
+        let selectedRowTop = listTop - CGFloat(selectedRow) * 26
         let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let detailsY = min(visible.maxY - detailsPanel.frame.height - 8, max(visible.minY + 8, selectedRowTop - detailsPanel.frame.height))
         detailsPanel.setFrameOrigin(NSPoint(x: listOrigin.x + panel.frame.width + panelGap, y: detailsY))
@@ -287,10 +293,15 @@ struct CuePanelView: View {
     let completions: [Completion]
     let selectedIndex: Int
 
+    private var visibleSuggestions: [(offset: Int, element: Completion)] {
+        let start = suggestionWindowStart(total: completions.count, selected: selectedIndex)
+        return Array(completions.enumerated().dropFirst(start).prefix(maximumVisibleSuggestions))
+    }
+
     var body: some View {
         VStack(spacing: 5) {
             VStack(spacing: 1) {
-                ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
+                ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                     HStack(spacing: 7) {
                         CueIcon(icon: completion.icon, kind: completion.kind)
                             .frame(width: 16, height: 16)
