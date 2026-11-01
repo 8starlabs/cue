@@ -452,9 +452,12 @@ struct CuePanelView: View {
                         .foregroundStyle(Color.white.opacity(0.72))
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("⌘I")
-                        .font(.custom("SFMono-Regular", size: 9))
-                        .foregroundStyle(Color.white.opacity(0.46))
+                    HStack(spacing: 8) {
+                        Text("↵ dismiss")
+                        Text("⌘I layout")
+                    }
+                    .font(.custom("Menlo-Regular", size: 8))
+                    .foregroundStyle(Color.white.opacity(0.46))
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 4)
@@ -479,7 +482,8 @@ struct CuePanelView: View {
         let hintText = Text(completion.argumentHint.map { "  \($0)" } ?? "")
             .foregroundColor(Color.white.opacity(0.48))
         return (matchedText + remainderText + hintText)
-            .font(.custom(selected ? "SFMono-Medium" : "SFMono-Regular", size: 12))
+            .font(.custom(selected ? "Menlo-Bold" : "Menlo-Regular", size: 12))
+            .tracking(0.35)
             .lineLimit(1)
     }
 }
@@ -497,9 +501,12 @@ struct CueDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack {
                 Spacer(minLength: 0)
-                Text("⌘I")
-                    .font(.custom("SFMono-Regular", size: 9))
-                    .foregroundStyle(Color.white.opacity(0.46))
+                HStack(spacing: 8) {
+                    Text("↵ dismiss")
+                    Text("⌘I layout")
+                }
+                .font(.custom("Menlo-Regular", size: 8))
+                .foregroundStyle(Color.white.opacity(0.46))
             }
         }
         .padding(8)

@@ -175,6 +175,10 @@ _cue_accept_widget() {
     zle .accept-line
     return
   fi
+  if [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
+    _cue_dismiss_widget
+    return
+  fi
   if _cue_complete_selection; then
     return
   fi
