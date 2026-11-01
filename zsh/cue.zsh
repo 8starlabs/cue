@@ -59,14 +59,11 @@ _cue_live_watch() {
   CUE_LIVE_LAST_BUFFER="$BUFFER"
   CUE_LIVE_LAST_CURSOR="$CURSOR"
 
-  if (( CURSOR != ${#BUFFER} )) || [[ "$BUFFER" != *[[:space:]]* || "$BUFFER" == *[[:space:]] ]]; then
-    zle -M ''
-    return
-  fi
-
   [[ -S "$CUE_SOCKET" ]] || return
   local line="$BUFFER"
-  [[ "$line" == *[[:space:]]* ]] || line=''
+  if (( CURSOR != ${#BUFFER} )) || [[ "$BUFFER" != *[[:space:]]* || "$BUFFER" == *[[:space:]] ]]; then
+    line=''
+  fi
   { printf '%s\t%s\t%s\t%s\t%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 

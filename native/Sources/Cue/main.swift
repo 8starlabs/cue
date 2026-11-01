@@ -292,6 +292,7 @@ final class CueService {
     private var latestRequest: (id: Int, metadata: RequestMetadata)?
     private var pendingMetadata: [Int: RequestMetadata] = [:]
     private let socketPath = "/tmp/cue-\(getuid()).sock"
+    private var visibilityTimer: Timer?
 
     init(model: CueModel, panelController: CuePanelController) {
         self.model = model
@@ -301,6 +302,25 @@ final class CueService {
     func start() {
         startWorker()
         startSocket()
+        startVisibilityMonitor()
+    }
+
+    private func startVisibilityMonitor() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
+                    self.panelController.hide()
+                    return
+                }
+                let terminal = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
+                var focusedWindow: CFTypeRef?
+                if AXUIElementCopyAttributeValue(terminal, kAXFocusedWindowAttribute as CFString, &focusedWindow) != .success || focusedWindow == nil {
+                    self.panelController.hide()
+                }
+            }
+        }
     }
 
     private func startWorker() {
