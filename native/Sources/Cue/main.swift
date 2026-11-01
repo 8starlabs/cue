@@ -158,7 +158,6 @@ final class CuePanelController {
         detailsHostingView.layoutSubtreeIfNeeded()
         detailsPanel.setContentSize(detailsHostingView.fittingSize)
         positionDetailsPanel()
-        positionDetailsPanel()
     }
 
     private func positionDetailsPanel() {
@@ -223,19 +222,19 @@ final class CuePanelController {
             let terminalColumn = min(columns - 1, max(0, metadata.terminalColumn - 1))
             let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
             x = textRect.minX + CGFloat(terminalColumn) * cellWidth
-            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight + 3
+            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight
             y = screenHeight - axY - panelSize.height
         } else if let focusedElement, let caret = axCaretRect(focusedElement),
            caret.width < 8, caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
            windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
             x = caret.minX
-            y = screenHeight - caret.maxY - panelSize.height - 3
+            y = screenHeight - caret.maxY - panelSize.height
         } else if let windowRect {
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
             x = textRect.minX + CGFloat(column) * cellWidth
-            let axY = textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight + 3
+            let axY = textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight
             y = screenHeight - axY - panelSize.height
         } else {
             let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
