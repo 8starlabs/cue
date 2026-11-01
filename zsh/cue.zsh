@@ -1,10 +1,9 @@
 # Cue's first zsh bridge. Source this after compinit and other completion plugins.
 
-cue_complete_widget() {
+_cue_completion() {
   local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
   if [[ ! -f "$engine" ]]; then
-    zle expand-or-complete
-    return
+    return 1
   fi
 
   local -a matches descriptions
@@ -15,10 +14,13 @@ cue_complete_widget() {
   done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
 
   if (( ${#matches} )); then
-    compadd -Q -U -l -d descriptions -- "${matches[@]}" && return
+    compadd -Q -U -l -d descriptions -- "${matches[@]}"
+    return
   fi
-  zle expand-or-complete
+  return 1
 }
 
-zle -N cue_complete_widget
+zmodload zsh/complist 2>/dev/null
+zle -C cue_complete_widget menu-select _cue_completion
+zstyle ':completion:cue_complete_widget:*' menu yes select=1
 bindkey '^I' cue_complete_widget
