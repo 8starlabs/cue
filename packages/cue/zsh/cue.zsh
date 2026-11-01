@@ -13,7 +13,6 @@ fi
 typeset -g KEYTIMEOUT=1
 
 typeset -gi CUE_SELECTED_INDEX=0
-typeset -gi CUE_USER_SELECTED=0
 typeset -ga CUE_MATCHES
 typeset -g CUE_MATCHES_BUFFER=''
 typeset -g CUE_MATCHES_CWD=''
@@ -23,6 +22,7 @@ typeset -gi CUE_CURSOR_COLUMN=0
 typeset -gi CUE_SUPPRESS_UNTIL_SPACE=0
 typeset -g CUE_DISMISSED_BUFFER=''
 typeset -g CUE_ACCEPTED_BUFFER=''
+typeset -g CUE_ENTER_DISMISS_BUFFER=''
 
 _cue_query_terminal_cursor() {
   local cursor_delta="${1:-0}"
@@ -95,7 +95,7 @@ _cue_send_hide() {
 
 _cue_dismiss_widget() {
   CUE_DISMISSED_BUFFER="$BUFFER"
-  CUE_USER_SELECTED=0
+  CUE_ENTER_DISMISS_BUFFER=''
   _cue_send_hide
   zle -M ''
 }
@@ -105,7 +105,6 @@ bindkey '^[' cue_dismiss_widget
 _cue_move_selection() {
   local direction="$1"
   if [[ "$BUFFER" == *[[:space:]]* ]] && _cue_matches; then
-    CUE_USER_SELECTED=1
     if [[ "$direction" == down ]]; then
       CUE_SELECTED_INDEX=$(( (CUE_SELECTED_INDEX + 1) % ${#CUE_MATCHES} ))
     else
@@ -148,13 +147,14 @@ _cue_complete_selection() {
   BUFFER="${prefix}${selected}${trailing}"
   CURSOR=$((${#prefix} + ${#selected}))
   CUE_SELECTED_INDEX=0
-  CUE_USER_SELECTED=0
-  if [[ "$BUFFER" == cd[[:space:]]* || "$selected" == */ ]]; then
-    # Directory suggestions can reveal another useful layer; let Enter accept
-    # the next suggestion until the user finishes the argument with a space.
+  if [[ "$BUFFER" == cd[[:space:]]* ]]; then
+    # Keep the next path level visible after a folder is accepted. Enter can
+    # dismiss that level; another Enter runs cd without editing the path.
     CUE_ACCEPTED_BUFFER=''
+    CUE_ENTER_DISMISS_BUFFER="$BUFFER"
   else
     CUE_ACCEPTED_BUFFER="$BUFFER"
+    CUE_ENTER_DISMISS_BUFFER=''
   fi
   # Keep the popup live after a directory completion; hide other suggestions
   # until the next argument is started.
@@ -179,7 +179,7 @@ _cue_accept_widget() {
     zle .accept-line
     return
   fi
-  if (( CUE_USER_SELECTED )) && [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
+  if [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
     _cue_dismiss_widget
     return
   fi
@@ -206,10 +206,12 @@ _cue_live_watch() {
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
     CUE_SELECTED_INDEX=0
-    CUE_USER_SELECTED=0
     CUE_DISMISSED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]] || CUE_ACCEPTED_BUFFER=''
+    [[ "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]] || CUE_ENTER_DISMISS_BUFFER=''
   fi
+  local action=''
+  [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]] && action='selected'
   CUE_LIVE_LAST_BUFFER="$BUFFER"
   CUE_LIVE_LAST_CURSOR="$CURSOR"
 
@@ -241,7 +243,7 @@ _cue_live_watch() {
     CUE_CURSOR_ROW=0
     CUE_CURSOR_COLUMN=0
   fi
-  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
 _cue_measure_prompt() {

@@ -8,12 +8,12 @@ Cue is designed to leave the command line in charge. The popup is a visual sugge
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` | Move through the visible suggestions. |
-| `Enter` | After you move the selection with an arrow key, dismiss suggestions without changing the command line. Otherwise, accept the default suggestion or run the command if there are no suggestions. |
+| `Enter` | Accept the highlighted suggestion. After accepting a `cd` folder, Enter dismisses the next-level suggestions; press Enter again to run `cd`. |
 | `Space` | Finish the current `cd` path. This closes its suggestions so Enter can run the command. |
 | `Tab` | Insert the highlighted Cue suggestion. It does not print zsh’s raw completion list. |
 | `Esc` | Close suggestions for the current input. Editing the input starts suggestions again. |
 | `⌘I` | Switch the description between the side card and the bottom of the suggestion panel. |
 
-For example, type `cd `, select a folder, and keep selecting or typing to move deeper. When the path is ready, press Space and then Enter to change directories.
+For example, type `cd ` and accept a folder with Tab or Enter. Cue shows that folder’s contents; Enter dismisses those suggestions, and another Enter changes directories.
 
 After a non-directory suggestion is inserted with Tab, Enter runs the completed command. Review the command before running it; Cue only fills the prompt and does not execute a suggestion on its own.
