@@ -42,8 +42,8 @@ export function CommandDemo() {
         </button>
       </div>
       <div className="terminal-screen">
-        <div className="terminal-path">~/work/8starlabs</div>
-        <div className="terminal-line"><span className="terminal-user">dev</span><span className="terminal-at">@</span><span className="terminal-host">macbook</span><span className="terminal-prompt"> % </span><span>git ch</span><span className="terminal-caret" aria-hidden="true" /></div>
+        <div className="terminal-path">~/work/project</div>
+        <div className="terminal-line"><span className="terminal-user">dev</span><span className="terminal-at">@</span><span className="terminal-host">terminal</span><span className="terminal-prompt"> % </span><span>git ch</span><span className="terminal-caret" aria-hidden="true" /></div>
         <div className="suggestion-anchor">
           <div id="cue-demo-suggestions" className={`t-dropdown suggestion-menu ${open ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} data-origin="top-left" role="listbox" aria-label="Git command suggestions" aria-hidden={!open}>
             {suggestions.map(({ command, hint, icon: Icon }, index) => (

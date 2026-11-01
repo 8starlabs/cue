@@ -54,7 +54,7 @@ See the [Getting started guide](apps/docs/content/docs/getting-started.mdx) for 
 
 ## Project status
 
-Cue is a personal prototype being prepared for a public 8StarLabs release. Homebrew distribution needs a published release archive and checksum before users can install it from a tap. Until then, build it from this checkout using the steps above.
+Cue is an early-stage prototype being prepared for a public 8StarLabs release. Homebrew distribution needs a published release archive and checksum before users can install it from a tap. Until then, build it from this checkout using the steps above.
 
 ## Credits
 
