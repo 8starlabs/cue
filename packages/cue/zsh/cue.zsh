@@ -2,6 +2,11 @@
 
 # Resolve the project from this file so widgets keep working in fresh shells.
 typeset -g CUE_HOME="${CUE_HOME:-${${(%):-%N}:A:h:h}}"
+# Older setup instructions exported the repository root as CUE_HOME. In the
+# monorepo, the runtime and app bundle live under packages/cue instead.
+if [[ -d "${CUE_HOME}/packages/cue" && -f "${CUE_HOME}/packages/cue/package.json" ]]; then
+  CUE_HOME="${CUE_HOME}/packages/cue"
+fi
 
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -ga CUE_MATCHES
