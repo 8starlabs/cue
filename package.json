@@ -1,0 +1,19 @@
+{
+  "name": "cue",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "complete": "npm run build && node dist/cli.js"
+  },
+  "dependencies": {
+    "@withfig/autocomplete": "2.692.3",
+    "shell-quote": "^1.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/shell-quote": "^1.7.5",
+    "typescript": "^5.7.2"
+  }
+}
