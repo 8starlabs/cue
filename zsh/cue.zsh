@@ -80,6 +80,15 @@ _cue_send_selection() {
   { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tselect:%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$CUE_SELECTED_INDEX" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
+_cue_dismiss_widget() {
+  if [[ -S "$CUE_SOCKET" ]]; then
+    { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\thide\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  fi
+  zle -M ''
+}
+zle -N cue_dismiss_widget _cue_dismiss_widget
+bindkey '^[' cue_dismiss_widget
+
 _cue_move_selection() {
   local direction="$1"
   if [[ "$BUFFER" == *[[:space:]]* ]] && _cue_matches; then

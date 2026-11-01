@@ -482,6 +482,10 @@ final class CueService {
     }
 
     private func submit(_ metadata: RequestMetadata) {
+        if metadata.action == "hide" {
+            DispatchQueue.main.async { self.panelController.hide() }
+            return
+        }
         if metadata.action.hasPrefix("select:"), let index = Int(metadata.action.dropFirst("select:".count)) {
             DispatchQueue.main.async { self.panelController.select(index) }
             return
