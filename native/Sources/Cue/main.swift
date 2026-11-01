@@ -190,11 +190,10 @@ final class CuePanelController {
             x = min(visible.maxX - panelSize.width - 12, visible.minX + 18 + estimatedColumn)
             y = visible.minY + 110
         }
-        if let windowRect {
-            let rightEdge = windowRect.maxX - 12
-            if x + panelSize.width > rightEdge { x = max(windowRect.minX + 12, rightEdge - panelSize.width) }
-            if y < 12 { y = max(12, screenHeight - windowRect.maxY + 44) }
-        }
+        let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let rightEdge = visible.maxX - 8
+        if x + panelSize.width > rightEdge { x = max(visible.minX + 8, rightEdge - panelSize.width) }
+        if y < visible.minY + 8 { y = visible.minY + 8 }
         return NSPoint(x: x, y: y)
     }
 

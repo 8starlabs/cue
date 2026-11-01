@@ -38,7 +38,7 @@ _cue_query_terminal_cursor() {
   local cursor_delta="${1:-0}"
   local response=''
   print -rn -- $'\e[6n' > /dev/tty
-  if IFS= read -r -s -d 'R' -t 0.02 response < /dev/tty; then
+  if IFS= read -r -s -d 'R' response < /dev/tty; then
     if [[ "$response" == *$'\e['* ]]; then
       local typed="${response%$'\e['*}"
       response="${response##*$'\e['}"
