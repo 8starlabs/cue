@@ -33,6 +33,7 @@ struct RequestMetadata {
 }
 
 private let maximumVisibleSuggestions = 7
+private let maximumSuggestions = 50
 private let suggestionRowHeight: CGFloat = 23
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
@@ -121,7 +122,7 @@ final class CuePanelController {
             return
         }
 
-        visibleCompletions = Array(completions.prefix(12))
+        visibleCompletions = Array(completions.prefix(maximumSuggestions))
         selectedIndex = 0
         hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()

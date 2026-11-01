@@ -1,10 +1,14 @@
 import { execFile } from "node:child_process";
+import { readdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
-import { parse } from "shell-quote";
+import { parse, quote } from "shell-quote";
 import type { FigArgument, FigGenerator, FigOption, FigSpec, FigSuggestion } from "./specs.js";
 import { loadSpec } from "./specs.js";
 
 const execFileAsync = promisify(execFile);
+const MAX_SUGGESTIONS = 50;
 
 export type Completion = {
   name: string;
@@ -100,6 +104,73 @@ async function runGenerator(generator: FigGenerator, cwd: string, context: strin
   }
 }
 
+function expandHome(value: string): string {
+  const home = homedir();
+  if (value === "~") return home;
+  if (value.startsWith("~/")) return path.join(home, value.slice(2));
+  if (value === "$HOME") return home;
+  if (value.startsWith("$HOME/")) return path.join(home, value.slice(6));
+  return value;
+}
+
+function quotePath(value: string): string {
+  if (value.startsWith("~/")) return `~/${quote([value.slice(2)])}`;
+  if (value.startsWith("$HOME/")) return `$HOME/${quote([value.slice(6)])}`;
+  return quote([value]);
+}
+
+async function completeDirectories(partial: string, cwd: string): Promise<Completion[]> {
+  const slash = partial.lastIndexOf("/");
+  const directoryPrefix = slash >= 0 ? partial.slice(0, slash + 1) : "";
+  const namePrefix = slash >= 0 ? partial.slice(slash + 1) : partial;
+  const target = path.resolve(cwd, expandHome(directoryPrefix || "."));
+  let entries;
+  try {
+    entries = await readdir(target, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const suggestions: Completion[] = [];
+  if ("..".startsWith(namePrefix) && suggestions.length < MAX_SUGGESTIONS) {
+    const name = "../";
+    suggestions.push({
+      name,
+      description: "Parent folder",
+      typedPrefix: namePrefix,
+      insertValue: quotePath(`${directoryPrefix}../`),
+      icon: "fig://icon?type=folder",
+      kind: "argument",
+    });
+  }
+
+  for (const entry of entries) {
+    if (suggestions.length >= MAX_SUGGESTIONS) break;
+    if (entry.name.startsWith(".") && !namePrefix.startsWith(".")) continue;
+    if (!entry.name.toLowerCase().startsWith(namePrefix.toLowerCase())) continue;
+    let isDirectory = entry.isDirectory();
+    if (!isDirectory && entry.isSymbolicLink()) {
+      try {
+        isDirectory = (await stat(path.join(target, entry.name))).isDirectory();
+      } catch {
+        continue;
+      }
+    }
+    if (!isDirectory) continue;
+
+    const name = `${entry.name}/`;
+    suggestions.push({
+      name,
+      description: "Folder",
+      typedPrefix: namePrefix,
+      insertValue: quotePath(`${directoryPrefix}${name}`),
+      icon: "fig://icon?type=folder",
+      kind: "argument",
+    });
+  }
+  return suggestions;
+}
+
 function visible(suggestions: FigSuggestion[], partial: string, kind: Completion["kind"]): Completion[] {
   const normalized: Array<FigSuggestion & { name: string }> = suggestions.flatMap((item) => {
     const names = typeof item.name === "string" ? [item.name] : item.name;
@@ -108,7 +179,7 @@ function visible(suggestions: FigSuggestion[], partial: string, kind: Completion
   return normalized
     .filter((item) => item.name.trim().length > 0 && item.name.toLowerCase().startsWith(partial.toLowerCase()))
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name))
-    .slice(0, 12)
+    .slice(0, MAX_SUGGESTIONS)
     .map((item) => {
       const args = Array.isArray(item.args) ? item.args : item.args ? [item.args] : [];
       const argument = args[0];
@@ -130,6 +201,7 @@ function visible(suggestions: FigSuggestion[], partial: string, kind: Completion
 export async function complete(line: string, cwd = process.cwd()): Promise<Completion[]> {
   const parsed = parseLine(line);
   if (!parsed) return [];
+  if (parsed.command === "cd") return completeDirectories(parsed.partial, cwd);
 
   const root = await loadSpec(parsed.command);
   if (!root) return [];
@@ -151,5 +223,5 @@ export async function complete(line: string, cwd = process.cwd()): Promise<Compl
     ...visible([...staticArgs, ...generated], parsed.partial, "argument"),
     ...visible(options, parsed.partial, "option"),
     ...visible(additional, parsed.partial, "argument"),
-  ].slice(0, 12);
+  ].slice(0, MAX_SUGGESTIONS);
 }
