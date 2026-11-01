@@ -228,43 +228,57 @@ struct CuePanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
-                HStack(spacing: 10) {
-                    CueIcon(icon: completion.icon, kind: completion.kind)
-                    .frame(width: 18, height: 18)
-                    Text(completion.name)
-                        .font(.system(size: 12, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
-                        .lineLimit(1)
-                    Spacer(minLength: 10)
-                    if let description = completion.description, index != selectedIndex {
-                        Text(description)
-                            .font(.system(size: 10))
-                            .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
-                            .lineLimit(1)
+        VStack(spacing: 5) {
+            HStack(alignment: .top, spacing: 6) {
+                VStack(spacing: 1) {
+                    ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
+                        HStack(spacing: 7) {
+                            CueIcon(icon: completion.icon, kind: completion.kind)
+                                .frame(width: 16, height: 16)
+                            Text(completion.name)
+                                .font(.system(size: 11, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 7)
+                        .frame(width: 205, height: 25)
+                        .foregroundStyle(Color.white)
+                        .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                     }
                 }
-                .padding(.horizontal, 9)
-                .frame(height: 26)
-                .foregroundStyle(Color.white)
-                .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+
+                VStack(spacing: 0) {
+                    if selectedIndex > 0 {
+                        Spacer().frame(height: CGFloat(selectedIndex) * 26)
+                    }
+                    Text(selected?.description ?? "No additional description")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
+                        .lineLimit(6)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(Color(red: 0.23, green: 0.23, blue: 0.24), in: RoundedRectangle(cornerRadius: 6))
+                    Spacer(minLength: 0)
+                }
+                .frame(width: 175, height: CGFloat(completions.count) * 26, alignment: .topLeading)
             }
-            Divider().padding(.top, 3)
+
+            Divider()
             HStack {
-                Text(selected?.description ?? "↑↓ to navigate")
+                Text("↑↓ Navigate")
                     .font(.system(size: 10).italic())
                     .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
-                    .lineLimit(1)
                 Spacer()
                 Text("Enter to complete")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(Color(red: 0.70, green: 0.70, blue: 0.72))
             }
-            .padding(.horizontal, 9)
-            .frame(height: 23)
+            .padding(.horizontal, 7)
+            .frame(height: 19)
         }
         .padding(6)
-        .frame(width: 420)
+        .frame(width: 405)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
     }
