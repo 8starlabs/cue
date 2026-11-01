@@ -35,7 +35,7 @@ struct RequestMetadata {
 
 private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
-private let suggestionRowHeight: CGFloat = 24
+private let suggestionRowHeight: CGFloat = 20
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
     max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
