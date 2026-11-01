@@ -99,7 +99,7 @@ final class CuePanelController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
         detailsPanel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 150, height: 60),
+            contentRect: NSRect(x: 0, y: 0, width: 260, height: 60),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -303,31 +303,19 @@ struct CuePanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 3) {
-            VStack(spacing: 1) {
-                ForEach(visibleSuggestions, id: \.element.id) { index, completion in
-                    HStack(spacing: 7) {
-                        CueIcon(icon: completion.icon, kind: completion.kind)
-                            .frame(width: 16, height: 16)
-                        suggestionLabel(completion, selected: index == selectedIndex)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 5)
-                    .frame(width: 203, height: 22)
-                    .foregroundStyle(Color.white)
-                    .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+        VStack(spacing: 1) {
+            ForEach(visibleSuggestions, id: \.element.id) { index, completion in
+                HStack(spacing: 7) {
+                    CueIcon(icon: completion.icon, kind: completion.kind)
+                        .frame(width: 16, height: 16)
+                    suggestionLabel(completion, selected: index == selectedIndex)
+                    Spacer(minLength: 0)
                 }
+                .padding(.horizontal, 5)
+                .frame(width: 203, height: 22)
+                .foregroundStyle(Color.white)
+                .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             }
-
-            Divider()
-            HStack {
-                Text("↑↓ Navigate")
-                    .font(.system(size: 10).italic())
-                    .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 7)
-            .frame(height: 19)
         }
         .padding(4)
         .frame(width: 211)
@@ -363,7 +351,7 @@ struct CueDetailView: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
-            .frame(width: 150, alignment: .topLeading)
+            .frame(width: 260, alignment: .topLeading)
             .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
     }
