@@ -103,33 +103,43 @@ final class CuePanelController {
     private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> NSPoint? {
         let app = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
         var windowValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-              let window = windowValue else { return nil }
-        let windowElement = unsafeBitCast(window, to: AXUIElement.self)
-        let measuredWindowRect = axRect(windowElement)
+        var windowElements: [AXUIElement] = []
+        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
+           let windowValue {
+            windowElements.append(unsafeBitCast(windowValue, to: AXUIElement.self))
+        }
+        var windowsValue: CFTypeRef?
+        if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+           let windows = windowsValue as? [AXUIElement] {
+            windowElements.append(contentsOf: windows)
+        }
+        let windowElement = windowElements.first(where: { element in
+            guard let rect = axRect(element) else { return false }
+            return rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite
+        }) ?? windowElements.first
+        let measuredWindowRect = windowElement.flatMap(axRect)
         let windowRect = measuredWindowRect.flatMap { rect in
             rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite ? rect : nil
-        } ?? CGRect(x: 40, y: 40, width: 700, height: 500)
+        }
 
         var focusedValue: CFTypeRef?
         var focusedElement: AXUIElement?
-        var textRect = windowRect.insetBy(dx: 12, dy: 34)
+        var textRect: CGRect?
         if AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
            let focusedValue {
             focusedElement = unsafeBitCast(focusedValue, to: AXUIElement.self)
             if let candidate = focusedElement.flatMap(axRect),
                candidate.width > 100, candidate.height > 100,
                candidate.origin.x.isFinite, candidate.origin.y.isFinite,
-               windowRect.insetBy(dx: -24, dy: -24).contains(CGPoint(x: candidate.midX, y: candidate.midY)) {
+               windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: candidate.midX, y: candidate.midY)) }) ?? false {
                 textRect = candidate
             }
         }
 
-        let screenHeight = NSScreen.main?.frame.height ?? 900
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        let screenHeight = screen?.frame.height ?? 900
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
-        let cellWidth = textRect.width / CGFloat(columns)
-        let cellHeight = textRect.height / CGFloat(lines)
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
         let fallbackRow = min(lines - 1, max(0, lines / 2))
         let column = absoluteColumn % columns
@@ -137,17 +147,29 @@ final class CuePanelController {
         var y: CGFloat
         if let focusedElement, let caret = axCaretRect(focusedElement),
            caret.width < 8, caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
-           windowRect.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) {
+           windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
             x = caret.minX
             y = screenHeight - caret.maxY - panelSize.height - 3
-        } else {
+        } else if let windowRect {
+            // Terminal doesn't expose caret bounds on every macOS release. Its
+            // active input line is generally near the bottom of the content area.
+            let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
+            let cellWidth = textRect.width / CGFloat(columns)
+            let cellHeight = textRect.height / CGFloat(lines)
             x = textRect.minX + CGFloat(column) * cellWidth
             let axY = textRect.minY + CGFloat(fallbackRow + 1) * cellHeight + 3
             y = screenHeight - axY - panelSize.height
+        } else {
+            let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+            let estimatedColumn = CGFloat(absoluteColumn) * 8.5
+            x = min(visible.maxX - panelSize.width - 12, visible.minX + 18 + estimatedColumn)
+            y = visible.minY + 110
         }
-        let rightEdge = windowRect.maxX - 12
-        if x + panelSize.width > rightEdge { x = max(windowRect.minX + 12, rightEdge - panelSize.width) }
-        if y < 12 { y = max(12, screenHeight - windowRect.maxY + 44) }
+        if let windowRect {
+            let rightEdge = windowRect.maxX - 12
+            if x + panelSize.width > rightEdge { x = max(windowRect.minX + 12, rightEdge - panelSize.width) }
+            if y < 12 { y = max(12, screenHeight - windowRect.maxY + 44) }
+        }
         return NSPoint(x: x, y: y)
     }
 

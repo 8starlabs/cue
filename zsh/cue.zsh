@@ -1,5 +1,8 @@
 # Cue's zsh bridge. Source this after compinit and other completion plugins.
 
+# Resolve the project from this file so widgets keep working in fresh shells.
+typeset -g CUE_HOME="${CUE_HOME:-${${(%):-%N}:A:h:h}}"
+
 _cue_completion() {
   local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
   if [[ ! -f "$engine" ]]; then
