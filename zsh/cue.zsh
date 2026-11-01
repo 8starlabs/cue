@@ -30,6 +30,37 @@ bindkey '^I' cue_complete_widget
 
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -ga CUE_MATCHES
+typeset -gi CUE_CURSOR_ROW=0
+typeset -gi CUE_CURSOR_COLUMN=0
+
+_cue_query_terminal_cursor() {
+  local cursor_delta="${1:-0}"
+  local response=''
+  print -rn -- $'\e[6n' > /dev/tty
+  if IFS= read -r -s -d 'R' -t 0.02 response < /dev/tty; then
+    if [[ "$response" == *$'\e['* ]]; then
+      local typed="${response%$'\e['*}"
+      response="${response##*$'\e['}"
+      [[ -n "$typed" ]] && zle -U "$typed"
+      local row="${response%%;*}"
+      local column="${response#*;}"
+      if [[ "$row" == <-> && "$column" == <-> ]]; then
+        (( column += cursor_delta ))
+        while (( column < 1 )); do (( column += COLUMNS, row -= 1 )); done
+        while (( column > COLUMNS )); do (( column -= COLUMNS, row += 1 )); done
+        (( row < 1 )) && row=1
+        CUE_CURSOR_ROW="$row"
+        CUE_CURSOR_COLUMN="$column"
+      else
+        zle -U "${response}R"
+      fi
+    else
+      zle -U "${response}R"
+    fi
+  elif [[ -n "$response" ]]; then
+    zle -U "$response"
+  fi
+}
 
 _cue_matches() {
   local engine="${CUE_HOME}/dist/cli.js"
@@ -45,7 +76,7 @@ _cue_matches() {
 
 _cue_send_selection() {
   [[ -S "$CUE_SOCKET" ]] || return
-  { printf '%s\t%s\t%s\t%s\t%s\tselect:%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$PWD" "$CUE_SELECTED_INDEX" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tselect:%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$CUE_SELECTED_INDEX" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
 _cue_move_selection() {
@@ -114,6 +145,7 @@ _cue_live_watch() {
   if [[ "$BUFFER" == "$CUE_LIVE_LAST_BUFFER" && "$CURSOR" == "$CUE_LIVE_LAST_CURSOR" ]]; then
     return
   fi
+  local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
     CUE_SELECTED_INDEX=0
   fi
@@ -124,8 +156,12 @@ _cue_live_watch() {
   local line="$BUFFER"
   if (( CURSOR != ${#BUFFER} )); then
     line=''
+    CUE_CURSOR_ROW=0
+    CUE_CURSOR_COLUMN=0
+  elif [[ -n "$line" ]]; then
+    _cue_query_terminal_cursor "$(( CURSOR - old_cursor ))"
   fi
-  { printf '%s\t%s\t%s\t%s\t%s\t\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
 _cue_measure_prompt() {

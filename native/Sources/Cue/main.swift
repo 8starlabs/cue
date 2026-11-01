@@ -22,6 +22,8 @@ struct RequestMetadata {
     let columns: Int
     let lines: Int
     let promptWidth: Int
+    let terminalRow: Int
+    let terminalColumn: Int
     let cwd: String
     let line: String
     let action: String
@@ -170,8 +172,11 @@ final class CuePanelController {
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
-            x = textRect.minX + CGFloat(column) * cellWidth
-            let axY = textRect.minY + CGFloat(fallbackRow + 1) * cellHeight + 3
+            let hasTerminalCursor = metadata.terminalRow > 0 && metadata.terminalColumn > 0
+            let terminalColumn = hasTerminalCursor ? metadata.terminalColumn - 1 : column
+            let terminalRow = hasTerminalCursor ? min(lines - 1, metadata.terminalRow - 1) : fallbackRow
+            x = textRect.minX + CGFloat(terminalColumn) * cellWidth
+            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight + 3
             y = screenHeight - axY - panelSize.height
         } else {
             let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
@@ -446,12 +451,14 @@ final class CueService {
         guard let separator = bytes.firstIndex(of: 0),
               let header = String(bytes: bytes[..<separator], encoding: .utf8),
               let line = String(bytes: bytes[(separator + 1)...], encoding: .utf8) else { return nil }
-        let fields = header.split(separator: "\t", maxSplits: 5, omittingEmptySubsequences: false)
+        let fields = header.split(separator: "\t", maxSplits: 7, omittingEmptySubsequences: false)
         guard fields.count >= 5,
               let cursor = Int(fields[0]), let columns = Int(fields[1]),
               let lines = Int(fields[2]), let promptWidth = Int(fields[3]) else { return nil }
-        let action = fields.count > 5 ? String(fields[5]) : ""
-        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, cwd: String(fields[4]), line: line, action: action)
+        let terminalRow = fields.count > 5 ? Int(fields[5]) ?? 0 : 0
+        let terminalColumn = fields.count > 6 ? Int(fields[6]) ?? 0 : 0
+        let action = fields.count > 7 ? String(fields[7]) : ""
+        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[4]), line: line, action: action)
     }
 
     private func submit(_ metadata: RequestMetadata) {
