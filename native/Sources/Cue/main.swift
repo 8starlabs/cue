@@ -62,15 +62,19 @@ final class CueAppDelegate: NSObject, NSApplicationDelegate {
 final class CuePanelController {
     private let panel: NSPanel
     private let hostingView: NSHostingView<CuePanelView>
+    private let detailsPanel: NSPanel
+    private let detailsHostingView: NSHostingView<CueDetailView>
     private let model: CueModel
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
+    private var listOrigin = NSPoint.zero
+    private let panelGap: CGFloat = 4
     var isVisible: Bool { panel.isVisible }
 
     init(model: CueModel) {
         self.model = model
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 220, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -83,12 +87,28 @@ final class CuePanelController {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+
+        detailsPanel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 150, height: 60),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        detailsHostingView = NSHostingView(rootView: CueDetailView(description: ""))
+        detailsPanel.contentView = detailsHostingView
+        detailsPanel.isOpaque = false
+        detailsPanel.backgroundColor = .clear
+        detailsPanel.hasShadow = true
+        detailsPanel.level = .floating
+        detailsPanel.hidesOnDeactivate = false
+        detailsPanel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     }
 
     func show(_ completions: [Completion], metadata: RequestMetadata) {
         guard !completions.isEmpty,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
             panel.orderOut(nil)
+            detailsPanel.orderOut(nil)
             return
         }
 
@@ -98,15 +118,24 @@ final class CuePanelController {
         hostingView.rootView = CuePanelView(completions: visible, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(350, size.width), height: size.height))
-        if let origin = popupOrigin(metadata: metadata, panelSize: panel.frame.size) {
-            panel.setFrameOrigin(origin)
+        panel.setContentSize(NSSize(width: max(215, size.width), height: size.height))
+        detailsHostingView.rootView = CueDetailView(description: visible.first?.description ?? "")
+        detailsHostingView.layoutSubtreeIfNeeded()
+        let detailsSize = detailsHostingView.fittingSize
+        detailsPanel.setContentSize(detailsSize)
+        let combinedSize = NSSize(width: panel.frame.width + panelGap + detailsPanel.frame.width, height: panel.frame.height)
+        if let origin = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+            listOrigin = origin
+            panel.setFrameOrigin(listOrigin)
+            positionDetailsPanel()
         }
         panel.orderFrontRegardless()
+        detailsPanel.orderFrontRegardless()
     }
 
     func hide() {
         panel.orderOut(nil)
+        detailsPanel.orderOut(nil)
         visibleCompletions = []
         selectedIndex = 0
     }
@@ -116,6 +145,19 @@ final class CuePanelController {
         selectedIndex = min(max(0, index), visibleCompletions.count - 1)
         hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
+        detailsHostingView.rootView = CueDetailView(description: visibleCompletions[selectedIndex].description ?? "")
+        detailsHostingView.layoutSubtreeIfNeeded()
+        detailsPanel.setContentSize(detailsHostingView.fittingSize)
+        positionDetailsPanel()
+        positionDetailsPanel()
+    }
+
+    private func positionDetailsPanel() {
+        let listTop = listOrigin.y + panel.frame.height - 6
+        let selectedRowTop = listTop - CGFloat(selectedIndex) * 26
+        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let detailsY = min(visible.maxY - detailsPanel.frame.height - 8, max(visible.minY + 8, selectedRowTop - detailsPanel.frame.height))
+        detailsPanel.setFrameOrigin(NSPoint(x: listOrigin.x + panel.frame.width + panelGap, y: detailsY))
     }
 
     private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> NSPoint? {
@@ -245,48 +287,23 @@ struct CuePanelView: View {
     let completions: [Completion]
     let selectedIndex: Int
 
-    private var selected: Completion? {
-        guard completions.indices.contains(selectedIndex) else { return nil }
-        return completions[selectedIndex]
-    }
-
     var body: some View {
         VStack(spacing: 5) {
-            HStack(alignment: .top, spacing: 4) {
-                VStack(spacing: 1) {
-                    ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
-                        HStack(spacing: 7) {
-                            CueIcon(icon: completion.icon, kind: completion.kind)
-                                .frame(width: 16, height: 16)
-                            Text(completion.name)
-                                .font(.system(size: 11, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 7)
-                        .frame(width: 203, height: 25)
-                        .foregroundStyle(Color.white)
-                        .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
+            VStack(spacing: 1) {
+                ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
+                    HStack(spacing: 7) {
+                        CueIcon(icon: completion.icon, kind: completion.kind)
+                            .frame(width: 16, height: 16)
+                        Text(completion.name)
+                            .font(.system(size: 11, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 7)
+                    .frame(width: 203, height: 25)
+                    .foregroundStyle(Color.white)
+                    .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                 }
-
-                VStack(spacing: 0) {
-                    if selectedIndex > 0 {
-                        Spacer().frame(height: CGFloat(selectedIndex) * 26)
-                    }
-                    Text(selected?.description ?? "No additional description")
-                        .font(.system(size: 9).italic())
-                        .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
-                        .lineLimit(6)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
-                    Spacer(minLength: 0)
-                }
-                        .frame(width: 134, alignment: .topLeading)
-                        .frame(minHeight: CGFloat(completions.count) * 26, alignment: .topLeading)
             }
 
             Divider()
@@ -294,18 +311,32 @@ struct CuePanelView: View {
                 Text("↑↓ Navigate")
                     .font(.system(size: 10).italic())
                     .foregroundStyle(Color(red: 0.78, green: 0.78, blue: 0.80))
-                Spacer()
-                Text("Enter to complete")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(Color(red: 0.70, green: 0.70, blue: 0.72))
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 7)
             .frame(height: 19)
         }
         .padding(6)
-        .frame(width: 353)
+        .frame(width: 215)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
+    }
+}
+
+struct CueDetailView: View {
+    let description: String
+
+    var body: some View {
+        Text(description.isEmpty ? "No additional description" : description)
+            .font(.system(size: 9).italic())
+            .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
+            .lineLimit(6)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .frame(width: 150, alignment: .topLeading)
+            .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
     }
 }
 
