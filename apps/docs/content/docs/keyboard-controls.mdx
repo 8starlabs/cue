@@ -1,0 +1,18 @@
+---
+title: Keyboard controls
+description: Work through Cue suggestions without leaving the prompt.
+---
+
+Cue is designed to leave the command line in charge. The popup is a visual suggestion list; your shell buffer remains the source of truth.
+
+| Key | Action |
+| --- | --- |
+| `↑` / `↓` | Move through the visible suggestions. |
+| `Enter` | Insert the selected suggestion. When a folder is inserted, Cue can show its contents as the next suggestion level. |
+| `Space` | Finish the current `cd` path. This closes its suggestions so Enter can run the command. |
+| `Tab` | Insert the highlighted Cue suggestion. It does not print zsh’s raw completion list. |
+| `Esc` | Close suggestions for the current input. Editing the input starts suggestions again. |
+
+For example, type `cd `, select a folder, and keep selecting or typing to move deeper. When the path is ready, press Space and then Enter to change directories.
+
+After a non-directory suggestion is inserted, Enter again runs the completed command. Review the command before running it; Cue only fills the prompt and does not execute a suggestion on its own.

@@ -1,38 +1,61 @@
 # Cue
 
-A personal prototype for IDE-style command suggestions in Apple Terminal. It uses the open Fig completion specs, with a persistent Node worker and a native macOS popup. Fig icon URIs are mapped to bundled Fig icon assets, and their descriptions are shown in the popup.
+**Autocomplete for the terminal you already use.**
 
-## Current prototype
+Cue brings IDE-style command suggestions to Apple Terminal: type a command, see relevant completions beside the caret, and keep working in your shell. It combines a small native macOS popup with Fig’s open autocomplete specs and a zsh bridge.
 
-The Node completion worker stays loaded while Cue is running, avoiding a cold Node startup on every keystroke. The zsh hook sends line updates asynchronously over a local Unix socket. Use Up/Down to highlight suggestions, Enter to insert the highlighted suggestion, or Tab to open zsh's selection menu.
+Built by **8StarLabs**.
 
-## Try the engine
+> Cue is an early, macOS-only project. A public Homebrew release is planned; it is not published yet.
 
-Requires Node.js 20 or later and pnpm.
+## Try it from this repository
+
+Requirements: macOS 13+, Node.js 20+, pnpm 10+, and Xcode Command Line Tools for the native app build.
 
 ```sh
 pnpm install
 pnpm build:app
-pnpm complete -- "git ch"
+source "$PWD/packages/cue/zsh/cue.zsh"
 ```
 
-The command accepts a line of shell input and prints suggestion objects. The current prototype handles one simple command at a time; shell pipelines, complex quoting, environment substitutions, and full Fig generator semantics are not implemented yet.
+In Apple Terminal, type `git ch` or `cd ` to see suggestions. Use the arrow keys to move through the list. Enter inserts the highlighted suggestion; for directories, continue selecting into the folder, or type a space to finish the path. Escape closes the popup for the current input.
 
-To try Cue in the current Terminal session without editing your shell configuration:
+The Cue app asks for macOS Accessibility access so it can position its popup against Terminal’s cursor. Shell integration currently targets zsh in Apple Terminal.
+
+## Workspace
+
+```text
+apps/
+  docs/                 Next.js documentation site (Fumadocs, Tailwind, shadcn/ui)
+packages/
+  cue/                  Completion engine, native app, and zsh integration
+Formula/                Homebrew formula source for a future release
+```
+
+## Common commands
 
 ```sh
-cd /path/to/cue
 pnpm install
-pnpm build:app
-source "$PWD/zsh/cue.zsh"
+pnpm dev:docs           # documentation site at http://localhost:3000
+pnpm build:docs         # production docs build
+pnpm check:docs         # docs TypeScript check
+pnpm build:cue          # completion engine
+pnpm build:app          # complete native app bundle
 ```
 
-The helper launches Cue and prompts for macOS Accessibility access so it can place the popup over Terminal. Then type `git ch`; suggestions should appear while typing. Use Up/Down and press Enter to insert the highlighted suggestion, or use Tab to select through zsh's menu.
+See the [Getting started guide](apps/docs/content/docs/getting-started.mdx) for setup details, keyboard behavior, and troubleshooting. Contributor and agent guidance lives in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md).
 
-## Planned pieces
+## How it works
 
-1. Improve parsing and Fig spec evaluation, including options that take arguments and dynamic generators.
-2. Add synchronized arrow-key selection, richer icon rendering, and polish popup positioning.
-3. Package and sign the app for distribution if it proves useful to share.
+- The **zsh bridge** observes the current command line and sends it to Cue over a local Unix socket.
+- The **completion engine** loads command specs from `@withfig/autocomplete` and adds filesystem completions such as `cd` paths.
+- The **native macOS app** draws and positions the suggestion popup without taking focus from Terminal.
+- The **docs site** explains installation, controls, supported commands, and known limitations.
 
-Fig's autocomplete specs and tooling are MIT-licensed upstream. This project uses the published `@withfig/autocomplete` package; see its package license and preserve notices when redistributing bundled upstream assets.
+## Project status
+
+Cue is a personal prototype being prepared for a public 8StarLabs release. Homebrew distribution needs a published release archive and checksum before users can install it from a tap. Until then, build it from this checkout using the steps above.
+
+## Credits
+
+Cue uses the MIT-licensed [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs and icons. See the package’s bundled license before redistributing the runtime.

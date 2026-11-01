@@ -78,6 +78,7 @@ final class CuePanelController {
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
     private var listOrigin = NSPoint.zero
+    private var activeVisibleFrame: CGRect?
     private let panelGap: CGFloat = 4
     var isVisible: Bool { panel.isVisible }
 
@@ -164,7 +165,7 @@ final class CuePanelController {
         let listTop = listOrigin.y + panel.frame.height - 6
         let selectedRow = selectedIndex - suggestionWindowStart(total: visibleCompletions.count, selected: selectedIndex)
         let selectedRowTop = listTop - CGFloat(selectedRow) * suggestionRowHeight
-        let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let visible = activeVisibleFrame ?? (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let detailsY = min(visible.maxY - detailsPanel.frame.height - 8, max(visible.minY + 8, selectedRowTop - detailsPanel.frame.height))
         detailsPanel.setFrameOrigin(NSPoint(x: listOrigin.x + panel.frame.width + panelGap, y: detailsY))
     }
@@ -204,8 +205,8 @@ final class CuePanelController {
             }
         }
 
-        let screen = NSScreen.main ?? NSScreen.screens.first
-        let screenHeight = screen?.frame.height ?? 900
+        let screen = windowRect.flatMap(screenForTerminalWindow) ?? NSScreen.main ?? NSScreen.screens.first
+        activeVisibleFrame = screen?.visibleFrame
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
@@ -213,6 +214,7 @@ final class CuePanelController {
         let column = absoluteColumn % columns
         var x: CGFloat
         var y: CGFloat
+        var caretAnchorY: CGFloat?
         if let windowRect, metadata.terminalRow > 0, metadata.terminalColumn > 0 {
             // The shell queries Terminal's live grid position; prefer it over
             // AX text-range bounds, which can describe the whole text surface.
@@ -221,21 +223,35 @@ final class CuePanelController {
             let cellHeight = textRect.height / CGFloat(lines)
             let terminalColumn = min(columns - 1, max(0, metadata.terminalColumn - 1))
             let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
-            x = textRect.minX + CGFloat(terminalColumn) * cellWidth
-            let axY = textRect.minY + CGFloat(terminalRow + 1) * cellHeight
-            y = screenHeight - axY - panelSize.height
+            let anchor = appKitPoint(fromQuartz: CGPoint(
+                x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
+                y: textRect.minY + CGFloat(terminalRow + 1) * cellHeight
+            ), on: screen)
+            x = anchor.x
+            caretAnchorY = anchor.y
+            y = anchor.y - panelSize.height
         } else if let focusedElement, let caret = axCaretRect(focusedElement),
-           caret.width < 8, caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
+           // Terminal reports the insertion caret at roughly one character
+           // cell wide. The old fixed 8pt limit rejected it at larger font
+           // sizes, forcing the popup to the bottom-row fallback.
+           caret.width <= max(18, (textRect?.width ?? windowRect?.width ?? 800) / CGFloat(columns) * 1.5),
+           caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
            windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
-            x = caret.minX
-            y = screenHeight - caret.maxY - panelSize.height
+            let anchor = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
+            x = anchor.x
+            caretAnchorY = anchor.y
+            y = anchor.y - panelSize.height
         } else if let windowRect {
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
-            x = textRect.minX + CGFloat(column) * cellWidth
-            let axY = textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight
-            y = screenHeight - axY - panelSize.height
+            let anchor = appKitPoint(fromQuartz: CGPoint(
+                x: textRect.minX + CGFloat(column) * cellWidth,
+                y: textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight
+            ), on: screen)
+            x = anchor.x
+            caretAnchorY = anchor.y
+            y = anchor.y - panelSize.height
         } else {
             let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
             let estimatedColumn = CGFloat(absoluteColumn) * 8.5
@@ -243,10 +259,40 @@ final class CuePanelController {
             y = visible.minY + 110
         }
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-        let rightEdge = visible.maxX - 8
-        if x + panelSize.width > rightEdge { x = max(visible.minX + 8, rightEdge - panelSize.width) }
-        if y < visible.minY + 8 { y = visible.minY + 8 }
+        let minX = visible.minX + 8
+        let maxX = max(minX, visible.maxX - panelSize.width - 8)
+        x = min(max(x, minX), maxX)
+        let minY = visible.minY + 8
+        if y < minY {
+            if let caretAnchorY, caretAnchorY + panelSize.height + 8 <= visible.maxY {
+                y = caretAnchorY + 2
+            } else {
+                y = minY
+            }
+        }
         return NSPoint(x: x, y: y)
+    }
+
+    private func screenForTerminalWindow(_ rect: CGRect) -> NSScreen? {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        return NSScreen.screens.first { screen in
+            guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return false }
+            return CGDisplayBounds(CGDirectDisplayID(number.uint32Value)).contains(center)
+        }
+    }
+
+    private func appKitPoint(fromQuartz point: CGPoint, on screen: NSScreen?) -> CGPoint {
+        guard let screen,
+              let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            let fallback = NSScreen.main ?? NSScreen.screens.first
+            return CGPoint(x: point.x, y: (fallback?.frame.maxY ?? 900) - point.y)
+        }
+        let quartzFrame = CGDisplayBounds(CGDirectDisplayID(number.uint32Value))
+        let appKitFrame = screen.frame
+        return CGPoint(
+            x: appKitFrame.minX + point.x - quartzFrame.minX,
+            y: appKitFrame.maxY - (point.y - quartzFrame.minY)
+        )
     }
 
     private func axCaretRect(_ element: AXUIElement) -> CGRect? {
@@ -306,7 +352,7 @@ struct CuePanelView: View {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                 HStack(spacing: 7) {
                     CueIcon(icon: completion.icon, kind: completion.kind)
-                        .frame(width: 16, height: 16)
+                        .frame(width: 20, height: 20)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
                 }
@@ -362,7 +408,11 @@ struct CueIcon: View {
 
     var body: some View {
         if let icon, !icon.hasPrefix("fig://") {
-            Text(icon).font(.system(size: 15))
+            Text(icon)
+                .font(.system(size: 14))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let image = figImage(icon) {
             Image(nsImage: image).resizable().scaledToFit().padding(1)
         } else {
@@ -413,8 +463,8 @@ final class CueService {
     private var process: Process?
     private var workerInput: FileHandle?
     private var outputBuffer = Data()
-    private var nextID = 0
     private var latestID = 0
+    private let latestIDLock = NSLock()
     private var inFlightID: Int?
     private var latestRequest: (id: Int, metadata: RequestMetadata)?
     private var pendingMetadata: [Int: RequestMetadata] = [:]
@@ -491,11 +541,14 @@ final class CueService {
     }
 
     private func startWorker() {
-        guard let home = Bundle.main.infoDictionary?["CueProjectPath"] as? String else { return }
+        guard let resourceURL = Bundle.main.resourceURL else { return }
+        let runtimeURL = resourceURL.appendingPathComponent("CueRuntime", isDirectory: true)
+        let workerURL = runtimeURL.appendingPathComponent("dist/worker.js")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["node", "\(home)/dist/worker.js"]
-        process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", "NODE_PATH": "\(home)/node_modules"]
+        process.arguments = ["node", workerURL.path]
+        process.currentDirectoryURL = runtimeURL
+        process.environment = ["PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin", "NODE_PATH": runtimeURL.appendingPathComponent("node_modules").path]
         let input = Pipe()
         let output = Pipe()
         process.standardInput = input
@@ -579,18 +632,35 @@ final class CueService {
 
     private func submit(_ metadata: RequestMetadata) {
         if metadata.action == "hide" {
+            // Hide on the next main-thread turn instead of waiting behind
+            // completion work queued on the engine.
             DispatchQueue.main.async { self.panelController.hide() }
+            latestIDLock.lock()
+            latestID += 1
+            let hideID = latestID
+            latestIDLock.unlock()
+            engineQueue.async {
+                self.latestIDLock.lock()
+                let isStillHidden = self.latestID == hideID
+                self.latestIDLock.unlock()
+                if isStillHidden { self.latestRequest = nil }
+            }
             return
         }
         if metadata.action.hasPrefix("select:"), let index = Int(metadata.action.dropFirst("select:".count)) {
             DispatchQueue.main.async { self.panelController.select(index) }
             return
         }
+        latestIDLock.lock()
+        latestID += 1
+        let requestID = latestID
+        latestIDLock.unlock()
         engineQueue.async { [weak self] in
             guard let self else { return }
-            self.nextID += 1
-            let requestID = self.nextID
-            self.latestID = requestID
+            self.latestIDLock.lock()
+            let isLatest = self.latestID == requestID
+            self.latestIDLock.unlock()
+            guard isLatest else { return }
             self.latestRequest = (requestID, metadata)
             if self.inFlightID == nil { self.sendLatestRequest() }
         }
@@ -598,6 +668,13 @@ final class CueService {
 
     private func sendLatestRequest() {
         guard let request = latestRequest, let workerInput else { return }
+        latestIDLock.lock()
+        let isLatest = request.id == latestID
+        latestIDLock.unlock()
+        guard isLatest else {
+            latestRequest = nil
+            return
+        }
         let body: [String: Any] = ["id": request.id, "line": request.metadata.line, "cwd": request.metadata.cwd]
         guard let data = try? JSONSerialization.data(withJSONObject: body),
               var text = String(data: data, encoding: .utf8) else { return }
@@ -622,13 +699,16 @@ final class CueService {
                 guard let response = try? JSONDecoder().decode(WorkerResponse.self, from: lineData) else { continue }
                 let metadata = self.pendingMetadata.removeValue(forKey: response.id)
                 self.inFlightID = nil
-                if response.id == self.latestID, let metadata {
+                self.latestIDLock.lock()
+                let isLatest = response.id == self.latestID
+                self.latestIDLock.unlock()
+                if isLatest, let metadata {
                     DispatchQueue.main.async {
                         self.model.completions = response.completions
                         self.model.selectedIndex = 0
                         if !response.completions.isEmpty {
                             self.panelController.show(response.completions, metadata: metadata)
-                        } else if metadata.line.isEmpty || metadata.line.last?.isWhitespace == true {
+                        } else {
                             self.panelController.hide()
                         }
                     }

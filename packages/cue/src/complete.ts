@@ -132,7 +132,16 @@ async function completeDirectories(partial: string, cwd: string): Promise<Comple
   }
 
   const suggestions: Completion[] = [];
-  if ("..".startsWith(namePrefix) && suggestions.length < MAX_SUGGESTIONS) {
+  // Keep the parent shortcut available for paths such as `src/components/`,
+  // but don't offer it again after the user has entered a parent traversal.
+  // Otherwise accepting the same-looking `../` row repeatedly grows the
+  // buffer forever (`../` -> `../../` -> `../../../` ...).
+  const isAlreadyTraversingParents = directoryPrefix
+    .split("/")
+    .filter(Boolean)
+    .at(-1) === "..";
+  const parentWasRequested = directoryPrefix.length === 0 || namePrefix.startsWith(".");
+  if (parentWasRequested && !isAlreadyTraversingParents && "..".startsWith(namePrefix) && suggestions.length < MAX_SUGGESTIONS) {
     const name = "../";
     suggestions.push({
       name,
@@ -171,6 +180,46 @@ async function completeDirectories(partial: string, cwd: string): Promise<Comple
   return suggestions;
 }
 
+async function completeCodePaths(partial: string, cwd: string): Promise<Completion[]> {
+  const slash = partial.lastIndexOf("/");
+  const directoryPrefix = slash >= 0 ? partial.slice(0, slash + 1) : "";
+  const namePrefix = slash >= 0 ? partial.slice(slash + 1) : partial;
+  const target = path.resolve(cwd, expandHome(directoryPrefix || "."));
+  let entries;
+  try {
+    entries = await readdir(target, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const suggestions: Completion[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") && !namePrefix.startsWith(".")) continue;
+    if (!entry.name.toLowerCase().startsWith(namePrefix.toLowerCase())) continue;
+
+    let isDirectory = entry.isDirectory();
+    if (!isDirectory && entry.isSymbolicLink()) {
+      try {
+        isDirectory = (await stat(path.join(target, entry.name))).isDirectory();
+      } catch {
+        // Keep broken symlinks available as file paths for tools that handle them.
+      }
+    }
+    const name = `${entry.name}${isDirectory ? "/" : ""}`;
+    suggestions.push({
+      name,
+      description: isDirectory ? "Folder" : "File",
+      typedPrefix: namePrefix,
+      insertValue: quotePath(`${directoryPrefix}${name}`),
+      icon: isDirectory ? "fig://icon?type=folder" : undefined,
+      kind: "argument",
+    });
+  }
+  return suggestions
+    .sort((a, b) => (a.kind === "argument" && a.name.endsWith("/") ? 0 : 1) - (b.kind === "argument" && b.name.endsWith("/") ? 0 : 1) || a.name.localeCompare(b.name))
+    .slice(0, MAX_SUGGESTIONS);
+}
+
 function visible(suggestions: FigSuggestion[], partial: string, kind: Completion["kind"]): Completion[] {
   const normalized: Array<FigSuggestion & { name: string }> = suggestions.flatMap((item) => {
     const names = typeof item.name === "string" ? [item.name] : item.name;
@@ -201,10 +250,22 @@ function visible(suggestions: FigSuggestion[], partial: string, kind: Completion
 export async function complete(line: string, cwd = process.cwd()): Promise<Completion[]> {
   const parsed = parseLine(line);
   if (!parsed) return [];
-  if (parsed.command === "cd") return completeDirectories(parsed.partial, cwd);
+  if (parsed.command === "cd") {
+    // `cd` takes one path. Once a path has been completed and the user types
+    // a space, there is no next argument to suggest (especially after `..`).
+    if (/\s$/.test(line) && parsed.words.length > 0) return [];
+    return completeDirectories(parsed.partial, cwd);
+  }
 
   const root = await loadSpec(parsed.command);
   if (!root) return [];
+
+  // `code` accepts file and folder paths as its ordinary arguments. Show those
+  // at the blank/partial argument instead of flooding the popup with flags;
+  // users can still reach every CLI option by starting it with `-`.
+  if (parsed.command === "code" && !parsed.partial.startsWith("-")) {
+    return completeCodePaths(parsed.partial, cwd);
+  }
 
   const { spec, remaining } = findActiveSpec(root, parsed.words);
   const options = list(spec.options ?? []).filter((option) => !remaining.includes(option.name as string));

@@ -1,0 +1,36 @@
+---
+title: Troubleshooting
+description: Fix the usual setup and popup issues.
+---
+
+## No suggestions appear
+
+1. Confirm you are using zsh in Apple Terminal.
+2. From the repository root, run `pnpm build:app` and wait for the build to finish.
+3. Load the integration again with `source "$PWD/packages/cue/zsh/cue.zsh"`.
+4. Check that `packages/cue/dist/cli.js` exists and that Node.js is available in your shell.
+5. Check **System Settings → Privacy & Security → Accessibility** and allow Cue if macOS requested access.
+
+Try `git ch` or `cd ` at a fresh prompt. If the app was rebuilt, quit the Cue menu-bar/background app and open `packages/cue/build/Cue.app` again.
+
+## The popup stays after a suggestion disappears
+
+Cue hides the popup when the latest completion result is empty. If the old panel is still visible, press Escape once, then edit the input. Restart Cue after building a new version.
+
+## The popup is in the wrong place
+
+Cue uses Terminal’s cursor report when available and accessibility geometry as a fallback. Verify Cue remains enabled under Accessibility. Display scaling, multiple monitors, and Terminal’s window position can affect the geometry Cue receives; include a screenshot and your monitor arrangement when reporting a positioning issue.
+
+## Tab prints text into the terminal
+
+Reload the current shell integration:
+
+```sh
+source "$PWD/packages/cue/zsh/cue.zsh"
+```
+
+Cue binds Tab to the native suggestion selection flow. Another plugin loaded afterward may replace that key binding.
+
+## The suggestion doesn’t match the installed command
+
+Cue reads Fig’s bundled command spec, which can be broader than the exact executable version installed on your Mac. For Visual Studio Code CLI flags, type `code -` to see options. For normal paths, type `code `.

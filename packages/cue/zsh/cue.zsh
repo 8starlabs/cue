@@ -3,36 +3,13 @@
 # Resolve the project from this file so widgets keep working in fresh shells.
 typeset -g CUE_HOME="${CUE_HOME:-${${(%):-%N}:A:h:h}}"
 
-_cue_completion() {
-  local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
-  if [[ ! -f "$engine" ]]; then
-    return 1
-  fi
-
-  local -a matches descriptions
-  local name description
-  while IFS= read -r -d '' name && IFS= read -r -d '' description; do
-    matches+=("$name")
-    descriptions+=("$description")
-  done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
-
-  if (( ${#matches} )); then
-    compadd -Q -U -l -d descriptions -- "${matches[@]}"
-    return
-  fi
-  return 1
-}
-
-zmodload zsh/complist 2>/dev/null
-zle -C cue_complete_widget menu-select _cue_completion
-zstyle ':completion:cue_complete_widget:*' menu yes select=1
-bindkey '^I' cue_complete_widget
-
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -ga CUE_MATCHES
 typeset -gi CUE_CURSOR_ROW=0
 typeset -gi CUE_CURSOR_COLUMN=0
 typeset -gi CUE_SUPPRESS_UNTIL_SPACE=0
+typeset -g CUE_DISMISSED_BUFFER=''
+typeset -g CUE_ACCEPTED_BUFFER=''
 
 _cue_query_terminal_cursor() {
   local cursor_delta="${1:-0}"
@@ -79,10 +56,15 @@ _cue_send_selection() {
   { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tselect:%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$CUE_SELECTED_INDEX" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
-_cue_dismiss_widget() {
+_cue_send_hide() {
   if [[ -S "$CUE_SOCKET" ]]; then
     { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\thide\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
   fi
+}
+
+_cue_dismiss_widget() {
+  CUE_DISMISSED_BUFFER="$BUFFER"
+  _cue_send_hide
   zle -M ''
 }
 zle -N cue_dismiss_widget _cue_dismiss_widget
@@ -115,31 +97,64 @@ bindkey '^[[A' cue_up_widget
 bindkey '^[OB' cue_down_widget
 bindkey '^[OA' cue_up_widget
 
-# Enter accepts the first live suggestion when the cursor is at the end of a
-# command word. A second Enter runs the completed command as usual.
-_cue_accept_widget() {
+# Insert the highlighted Cue suggestion without invoking zsh's printed
+# completion list. Return nonzero when there is no suggestion to insert.
+_cue_complete_selection() {
+  (( CURSOR == ${#BUFFER} )) || return 1
+  [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] || return 1
   local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
-  if [[ -f "$engine" && "$BUFFER" == *[[:space:]]* ]]; then
-    local selected
-    local -a matches
-    local name description
-    while IFS= read -r -d '' name && IFS= read -r -d '' description; do
-      matches+=("$name")
-    done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
-    if (( CUE_SELECTED_INDEX >= ${#matches} )); then CUE_SELECTED_INDEX=0; fi
-    selected="${matches[$(( CUE_SELECTED_INDEX + 1 ))]}"
-    if [[ -n "$selected" ]]; then
-      local current="${LBUFFER##*[[:space:]]}"
-      local prefix="${LBUFFER[1,$(( ${#LBUFFER} - ${#current} ))]}"
-      local trailing="${RBUFFER}"
-      BUFFER="${prefix}${selected}${trailing}"
-      CURSOR=$((${#prefix} + ${#selected}))
-      CUE_SELECTED_INDEX=0
-      CUE_SUPPRESS_UNTIL_SPACE=1
-      zle -M ''
-      return
-    fi
+  [[ -f "$engine" && "$BUFFER" == *[[:space:]]* ]] || return 1
+  local selected
+  local -a matches
+  local name description
+  while IFS= read -r -d '' name && IFS= read -r -d '' description; do
+    matches+=("$name")
+  done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
+  (( CUE_SELECTED_INDEX >= ${#matches} )) && CUE_SELECTED_INDEX=0
+  selected="${matches[$(( CUE_SELECTED_INDEX + 1 ))]}"
+  [[ -n "$selected" ]] || return 1
+
+  local current="${LBUFFER##*[[:space:]]}"
+  local prefix="${LBUFFER[1,$(( ${#LBUFFER} - ${#current} ))]}"
+  local trailing="${RBUFFER}"
+  BUFFER="${prefix}${selected}${trailing}"
+  CURSOR=$((${#prefix} + ${#selected}))
+  CUE_SELECTED_INDEX=0
+  if [[ "$BUFFER" == cd[[:space:]]* || "$selected" == */ ]]; then
+    # Directory suggestions can reveal another useful layer; let Enter accept
+    # the next suggestion until the user finishes the argument with a space.
+    CUE_ACCEPTED_BUFFER=''
+  else
+    CUE_ACCEPTED_BUFFER="$BUFFER"
   fi
+  # Keep the popup live after a directory completion; hide other suggestions
+  # until the next argument is started.
+  if [[ "$BUFFER" == cd[[:space:]]* ]]; then
+    CUE_SUPPRESS_UNTIL_SPACE=0
+  else
+    CUE_SUPPRESS_UNTIL_SPACE=1
+  fi
+  zle -M ''
+  return 0
+}
+
+_cue_tab_widget() { _cue_complete_selection }
+zle -N cue_tab_widget _cue_tab_widget
+bindkey '^I' cue_tab_widget
+
+_cue_accept_widget() {
+  if [[ -n "$CUE_ACCEPTED_BUFFER" && "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]]; then
+    CUE_ACCEPTED_BUFFER=''
+    CUE_DISMISSED_BUFFER="$BUFFER"
+    _cue_send_hide
+    zle .accept-line
+    return
+  fi
+  if _cue_complete_selection; then
+    return
+  fi
+  CUE_DISMISSED_BUFFER="$BUFFER"
+  _cue_send_hide
   zle .accept-line
 }
 zle -N cue_accept_widget _cue_accept_widget
@@ -157,6 +172,8 @@ _cue_live_watch() {
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
     CUE_SELECTED_INDEX=0
+    CUE_DISMISSED_BUFFER=''
+    [[ "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]] || CUE_ACCEPTED_BUFFER=''
   fi
   CUE_LIVE_LAST_BUFFER="$BUFFER"
   CUE_LIVE_LAST_CURSOR="$CURSOR"

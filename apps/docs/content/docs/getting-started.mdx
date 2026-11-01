@@ -1,0 +1,52 @@
+---
+title: Get started
+description: Build Cue and enable its zsh integration in Apple Terminal.
+---
+
+## Requirements
+
+- macOS 13 or later
+- Apple Terminal
+- zsh
+- Node.js 22 or later
+- pnpm 10 or later
+- Xcode Command Line Tools, to build the Swift app
+
+## Build Cue
+
+From the repository root:
+
+```sh
+pnpm install
+pnpm build:app
+```
+
+This compiles the completion engine, builds the native Cue app, and places it at `packages/cue/build/Cue.app`.
+
+## Load the shell integration
+
+In the same Terminal window, run:
+
+```sh
+source "$PWD/packages/cue/zsh/cue.zsh"
+```
+
+Keep the terminal working directory at the repository root when running this command. To load Cue automatically in future zsh sessions, add an absolute source path to `~/.zshrc`:
+
+```sh
+source "$HOME/code/cue/packages/cue/zsh/cue.zsh"
+```
+
+Change that path if you cloned Cue somewhere else. Restart Terminal or source `~/.zshrc` to apply it.
+
+## Grant Accessibility access
+
+macOS may ask to let Cue control your computer. Allow Cue under **System Settings → Privacy & Security → Accessibility**. Cue uses this access to read Terminal window geometry and place the suggestion popup near the caret; it does not take keyboard focus away from Terminal.
+
+## Try a few commands
+
+Type `git ch`, `cd` followed by a space, or `code` followed by a space in the prompt and wait for the suggestion panel. `git ch` shows matching Git subcommands. `cd ` shows folders in the current directory. `code ` shows files and folders that can be opened in Visual Studio Code. Continue typing to narrow the list.
+
+## Homebrew
+
+Cue is being organized for Homebrew distribution, but no public tap or release archive is published yet. Until a tagged release is available, build it from this repository using the steps above.

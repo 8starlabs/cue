@@ -8,10 +8,17 @@ pnpm build
 swift build --package-path "$ROOT/native" -c release
 
 APP="$ROOT/build/Cue.app"
+RUNTIME="$APP/Contents/Resources/CueRuntime"
+VERSION="$(node -p "require('$ROOT/package.json').version")"
+rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/native/.build/release/Cue" "$APP/Contents/MacOS/Cue"
 cp -R "$ROOT/node_modules/@withfig/autocomplete/icons" "$APP/Contents/Resources/FigIcons"
 cp "$ROOT/node_modules/@withfig/autocomplete/LICENSE" "$APP/Contents/Resources/FigIcons/LICENSE"
+mkdir -p "$RUNTIME/dist" "$RUNTIME/node_modules/@withfig"
+cp -R "$ROOT/dist/" "$RUNTIME/dist/"
+cp -RL "$ROOT/node_modules/@withfig/autocomplete" "$RUNTIME/node_modules/@withfig/autocomplete"
+cp -RL "$ROOT/node_modules/shell-quote" "$RUNTIME/node_modules/shell-quote"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -22,11 +29,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Cue</string>
   <key>CFBundleDisplayName</key><string>Cue</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleVersion</key><string>0.1.0</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>LSUIElement</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>CueProjectPath</key><string>$ROOT</string>
 </dict>
 </plist>
 PLIST
