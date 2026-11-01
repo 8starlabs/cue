@@ -315,6 +315,7 @@ final class CueService {
     private var pendingMetadata: [Int: RequestMetadata] = [:]
     private let socketPath = "/tmp/cue-\(getuid()).sock"
     private var visibilityTimer: Timer?
+    private var activationObserver: NSObjectProtocol?
 
     init(model: CueModel, panelController: CuePanelController) {
         self.model = model
@@ -330,6 +331,17 @@ final class CueService {
     private func startVisibilityMonitor() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didActivateApplicationNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self else { return }
+                let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                if activatedApp?.bundleIdentifier != "com.apple.Terminal" {
+                    self.panelController.hide()
+                }
+            }
             self.visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
                 guard let self else { return }
                 guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
