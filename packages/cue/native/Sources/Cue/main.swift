@@ -461,7 +461,7 @@ struct CuePanelView: View {
                         if hasAcceptedSelection {
                             Text("↵ dismiss")
                         }
-                        Text("⌘I layout")
+                        Text("(⌘I)")
                     }
                     .font(.custom("Menlo-Regular", size: 8))
                     .foregroundStyle(Color.white.opacity(0.46))
@@ -513,7 +513,7 @@ struct CueDetailView: View {
                     if hasAcceptedSelection {
                         Text("↵ dismiss")
                     }
-                    Text("⌘I layout")
+                    Text("(⌘I)")
                 }
                 .font(.custom("Menlo-Regular", size: 8))
                 .foregroundStyle(Color.white.opacity(0.46))
