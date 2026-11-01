@@ -8,9 +8,15 @@ Built by **8StarLabs**.
 
 > Cue is an early, macOS-only project. A public Homebrew release is planned; it is not published yet.
 
+## Why I built Cue
+
+I started using Fig before [Amazon acquired it](https://github.com/withfig/fig/issues/2706), and I loved having useful command suggestions appear right in my terminal as I typed. Fig’s CLI autocomplete became part of Amazon Q Developer CLI, which was later rebranded as Kiro.
+
+When Kiro [announced that CLI v3 would retire inline shell autocomplete and the desktop app](https://kiro.dev/blog/cli-3/), I was genuinely sad to lose an experience I’d come to rely on. I wanted to bring it back, so here it is: Cue is my independent attempt to restore the autocomplete experience I loved, built on Fig’s open autocomplete specs.
+
 ## Try it from this repository
 
-Requirements: macOS 13+, Node.js 20+, pnpm 10+, and Xcode Command Line Tools for the native app build.
+Requirements: macOS 13+, Node.js 22+, pnpm 10+, and Xcode Command Line Tools for the native app build.
 
 ```sh
 pnpm install
