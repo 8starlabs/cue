@@ -281,7 +281,8 @@ struct CuePanelView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
-                        .background(Color(red: 0.23, green: 0.23, blue: 0.24), in: RoundedRectangle(cornerRadius: 6))
+                        .background(Color(red: 0.27, green: 0.27, blue: 0.28), in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.34, green: 0.34, blue: 0.35), lineWidth: 1))
                     Spacer(minLength: 0)
                 }
                         .frame(width: 134, alignment: .topLeading)
