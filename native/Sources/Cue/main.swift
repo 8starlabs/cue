@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import SwiftUI
 import Darwin
 
@@ -117,7 +118,8 @@ final class CuePanelController {
     }
 
     private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> NSPoint? {
-        let app = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
+        let terminalPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        let app = AXUIElementCreateApplication(terminalPID)
         var windowValue: CFTypeRef?
         var windowElements: [AXUIElement] = []
         if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
@@ -133,10 +135,8 @@ final class CuePanelController {
             guard let rect = axRect(element) else { return false }
             return rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite
         }) ?? windowElements.first
-        let measuredWindowRect = windowElement.flatMap(axRect)
-        let windowRect = measuredWindowRect.flatMap { rect in
-            rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite ? rect : nil
-        }
+        let axWindowRect = windowElement.flatMap(axRect).flatMap(validWindowRect)
+        let windowRect = axWindowRect ?? windowServerRect(for: terminalPID).flatMap(validWindowRect)
 
         var focusedValue: CFTypeRef?
         var focusedElement: AXUIElement?
@@ -208,6 +208,23 @@ final class CuePanelController {
         var rect = CGRect.zero
         guard AXValueGetValue(unsafeBitCast(boundsValue, to: AXValue.self), .cgRect, &rect) else { return nil }
         return rect
+    }
+
+    private func validWindowRect(_ rect: CGRect) -> CGRect? {
+        rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite ? rect : nil
+    }
+
+    private func windowServerRect(for pid: pid_t) -> CGRect? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return nil }
+        for window in windows {
+            guard (window[kCGWindowOwnerPID as String] as? Int) == Int(pid),
+                  (window[kCGWindowLayer as String] as? Int) == 0,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds) else { continue }
+            return rect
+        }
+        return nil
     }
 
     private func axRect(_ element: AXUIElement) -> CGRect? {
