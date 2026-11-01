@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "complete": "npm run build && node dist/cli.js"
+    "complete": "npm run build && node dist/cli.js",
+    "build:app": "bash scripts/build-app.sh"
   },
   "dependencies": {
     "@withfig/autocomplete": "2.692.3",

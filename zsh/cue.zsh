@@ -27,6 +27,8 @@ bindkey '^I' cue_complete_widget
 
 typeset -g CUE_LIVE_LAST_BUFFER=''
 typeset -g CUE_LIVE_LAST_CURSOR=''
+typeset -gi CUE_PROMPT_WIDTH=0
+typeset -g CUE_SOCKET="/tmp/cue-${UID}.sock"
 
 _cue_live_watch() {
   if [[ "$BUFFER" == "$CUE_LIVE_LAST_BUFFER" && "$CURSOR" == "$CUE_LIVE_LAST_CURSOR" ]]; then
@@ -40,21 +42,24 @@ _cue_live_watch() {
     return
   fi
 
-  local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
-  [[ -f "$engine" ]] || return
-  local -a names
-  local name description
-  while IFS= read -r -d '' name; do
-    IFS= read -r -d '' description || break
-    names+=("$name")
-  done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
-
-  if (( ${#names} )); then
-    zle -M "Cue: ${(j:   :)names[1,5]}"
-  else
-    zle -M ''
-  fi
+  [[ -S "$CUE_SOCKET" ]] || return
+  local line="$BUFFER"
+  [[ "$line" == *[[:space:]]* ]] || line=''
+  { printf '%s\t%s\t%s\t%s\t%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
 
+_cue_measure_prompt() {
+  local rendered
+  rendered="$(print -P -- "$PROMPT" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
+  CUE_PROMPT_WIDTH=${#rendered}
+}
+_cue_measure_prompt
+
 autoload -Uz add-zle-hook-widget
+autoload -Uz add-zsh-hook
 add-zle-hook-widget zle-line-pre-redraw _cue_live_watch
+add-zsh-hook precmd _cue_measure_prompt
+
+if [[ -d "${CUE_HOME:-$HOME/Applications/Cue}/build/Cue.app" ]]; then
+  /usr/bin/open -ga "${CUE_HOME:-$HOME/Applications/Cue}/build/Cue.app" >/dev/null 2>&1
+fi

@@ -1,10 +1,10 @@
 # Cue
 
-A personal prototype for Fig-style command suggestions in Apple Terminal. It uses the open Fig completion specs as its command knowledge and is currently a completion-engine scaffold; the native popup is the next piece.
+A personal prototype for IDE-style command suggestions in Apple Terminal. It uses the open Fig completion specs, with a persistent Node worker and a native macOS popup. Fig icon URIs are mapped to bundled Fig icon assets, and their descriptions are shown in the popup.
 
 ## Current prototype
 
-The Node completion engine loads published Fig specs and returns matching subcommands, options, and argument suggestions as JSON. It includes basic command/argument generator support. The zsh integration shows a short live suggestion line as you type after a command and uses Tab to open zsh's selection menu. The native floating popup is still to come.
+The Node completion worker stays loaded while Cue is running, avoiding a cold Node startup on every keystroke. The zsh hook sends line updates asynchronously over a local Unix socket. Tab opens zsh's selection menu to accept a suggestion.
 
 ## Try the engine
 
@@ -12,25 +12,28 @@ Requires Node.js 20 or later and pnpm.
 
 ```sh
 pnpm install
+pnpm build:app
 pnpm complete -- "git ch"
-pnpm complete -- "git checkout "
 ```
 
 The command accepts a line of shell input and prints suggestion objects. The current prototype handles one simple command at a time; shell pipelines, complex quoting, environment substitutions, and full Fig generator semantics are not implemented yet.
 
-To try the Tab widget in the current Terminal session without editing your shell configuration:
+To try Cue in the current Terminal session without editing your shell configuration:
 
 ```sh
+cd /path/to/cue
+pnpm install
+pnpm build:app
 export CUE_HOME="$PWD"
 source "$CUE_HOME/zsh/cue.zsh"
 ```
 
-Then type a command such as `git ch` and press Tab. For a permanent setup, add those two lines to `~/.zshrc` after reviewing them.
+The helper launches Cue and prompts for macOS Accessibility access so it can place the popup over Terminal. Then type `git ch`; suggestions should appear while typing. Press Tab to select through zsh's menu.
 
 ## Planned pieces
 
 1. Improve parsing and Fig spec evaluation, including options that take arguments and dynamic generators.
-2. Add a native macOS popup positioned over Apple Terminal, with keyboard navigation.
-3. Package it as a local Mac app; consider signing and distribution if it proves useful to share.
+2. Add synchronized arrow-key selection, richer icon rendering, and polish popup positioning.
+3. Package and sign the app for distribution if it proves useful to share.
 
 Fig's autocomplete specs and tooling are MIT-licensed upstream. This project uses the published `@withfig/autocomplete` package; see its package license and preserve notices when redistributing bundled upstream assets.
