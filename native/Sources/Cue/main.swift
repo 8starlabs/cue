@@ -65,6 +65,7 @@ final class CuePanelController {
     private let model: CueModel
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
+    var isVisible: Bool { panel.isVisible }
 
     init(model: CueModel) {
         self.model = model
@@ -372,6 +373,7 @@ final class CueService {
     private let socketPath = "/tmp/cue-\(getuid()).sock"
     private var visibilityTimer: Timer?
     private var activationObserver: NSObjectProtocol?
+    private var previousTerminalWindow: (id: CGWindowID, frame: CGRect)?
 
     init(model: CueModel, panelController: CuePanelController) {
         self.model = model
@@ -398,10 +400,11 @@ final class CueService {
                     self.panelController.hide()
                 }
             }
-            self.visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self.visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 guard let self else { return }
                 guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
                     self.panelController.hide()
+                    self.previousTerminalWindow = nil
                     return
                 }
                 let terminal = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
@@ -410,8 +413,33 @@ final class CueService {
                    let windows = windowsValue as? [AXUIElement], windows.isEmpty {
                     self.panelController.hide()
                 }
+                let currentWindow = self.frontmostTerminalWindow()
+                if self.panelController.isVisible,
+                   let previous = self.previousTerminalWindow,
+                   let currentWindow,
+                   (previous.id != currentWindow.id || previous.frame != currentWindow.frame) {
+                    self.panelController.hide()
+                }
+                self.previousTerminalWindow = currentWindow
             }
         }
+    }
+
+    private func frontmostTerminalWindow() -> (id: CGWindowID, frame: CGRect)? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.bundleIdentifier == "com.apple.Terminal",
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        for window in windows {
+            guard (window[kCGWindowOwnerPID as String] as? Int) == Int(app.processIdentifier),
+                  (window[kCGWindowLayer as String] as? Int) == 0,
+                  let id = (window[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let bounds = window[kCGWindowBounds as String] as? NSDictionary,
+                  let frame = CGRect(dictionaryRepresentation: bounds) else { continue }
+            return (id, frame)
+        }
+        return nil
     }
 
     private func startWorker() {
