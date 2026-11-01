@@ -182,7 +182,7 @@ final class CuePanelController {
         )
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(descriptionAtBottom ? 450 : 250, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(descriptionAtBottom ? 400 : 250, size.width), height: size.height))
         detailsHostingView.rootView = CueDetailView(description: description, hasAcceptedSelection: hasAcceptedSelection)
         detailsHostingView.layoutSubtreeIfNeeded()
         detailsPanel.setContentSize(detailsHostingView.fittingSize)
@@ -442,7 +442,7 @@ struct CuePanelView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 3)
-                .frame(width: descriptionAtBottom ? 446 : 246, height: suggestionRowHeight)
+                .frame(width: descriptionAtBottom ? 396 : 246, height: suggestionRowHeight)
                 .foregroundStyle(Color.white)
                 .background(index == selectedIndex ? Color(red: 0.18, green: 0.37, blue: 0.75) : Color.clear, in: RoundedRectangle(cornerRadius: 3))
             }
@@ -468,11 +468,11 @@ struct CuePanelView: View {
                 }
                 .padding(.horizontal, 5)
                 .padding(.vertical, 4)
-                .frame(width: 446, alignment: .leading)
+                .frame(width: 396, alignment: .leading)
             }
         }
         .padding(2)
-        .frame(width: descriptionAtBottom ? 450 : 250)
+        .frame(width: descriptionAtBottom ? 400 : 250)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 5))
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color(red: 0.23, green: 0.23, blue: 0.24), lineWidth: 1))
     }
