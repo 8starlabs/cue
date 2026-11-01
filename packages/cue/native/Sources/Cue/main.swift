@@ -612,6 +612,10 @@ final class CueService {
                     self.previousTerminalWindow = nil
                     return
                 }
+                guard self.panelController.isVisible else {
+                    self.previousTerminalWindow = nil
+                    return
+                }
                 let terminal = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
                 var windowsValue: CFTypeRef?
                 if AXUIElementCopyAttributeValue(terminal, kAXWindowsAttribute as CFString, &windowsValue) == .success,
