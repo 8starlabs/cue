@@ -7,6 +7,8 @@ import Darwin
 struct Completion: Decodable, Identifiable {
     let name: String
     let description: String?
+    let argumentHint: String?
+    let typedPrefix: String
     let insertValue: String
     let icon: String?
     let kind: String
@@ -31,6 +33,7 @@ struct RequestMetadata {
 }
 
 private let maximumVisibleSuggestions = 7
+private let suggestionRowHeight: CGFloat = 23
 
 private func suggestionWindowStart(total: Int, selected: Int) -> Int {
     max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
@@ -123,7 +126,7 @@ final class CuePanelController {
         hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(215, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(211, size.width), height: size.height))
         detailsHostingView.rootView = CueDetailView(description: visibleCompletions.first?.description ?? "")
         detailsHostingView.layoutSubtreeIfNeeded()
         let detailsSize = detailsHostingView.fittingSize
@@ -160,7 +163,7 @@ final class CuePanelController {
     private func positionDetailsPanel() {
         let listTop = listOrigin.y + panel.frame.height - 6
         let selectedRow = selectedIndex - suggestionWindowStart(total: visibleCompletions.count, selected: selectedIndex)
-        let selectedRowTop = listTop - CGFloat(selectedRow) * 26
+        let selectedRowTop = listTop - CGFloat(selectedRow) * suggestionRowHeight
         let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let detailsY = min(visible.maxY - detailsPanel.frame.height - 8, max(visible.minY + 8, selectedRowTop - detailsPanel.frame.height))
         detailsPanel.setFrameOrigin(NSPoint(x: listOrigin.x + panel.frame.width + panelGap, y: detailsY))
@@ -299,19 +302,17 @@ struct CuePanelView: View {
     }
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             VStack(spacing: 1) {
                 ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                     HStack(spacing: 7) {
                         CueIcon(icon: completion.icon, kind: completion.kind)
                             .frame(width: 16, height: 16)
-                        Text(completion.name)
-                            .font(.system(size: 11, weight: index == selectedIndex ? .semibold : .regular, design: .monospaced))
-                            .lineLimit(1)
+                        suggestionLabel(completion, selected: index == selectedIndex)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 7)
-                    .frame(width: 203, height: 25)
+                    .padding(.horizontal, 5)
+                    .frame(width: 203, height: 22)
                     .foregroundStyle(Color.white)
                     .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                 }
@@ -327,10 +328,26 @@ struct CuePanelView: View {
             .padding(.horizontal, 7)
             .frame(height: 19)
         }
-        .padding(6)
-        .frame(width: 215)
+        .padding(4)
+        .frame(width: 211)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
+    }
+
+    private func suggestionLabel(_ completion: Completion, selected: Bool) -> some View {
+        let prefixLength = min(completion.typedPrefix.count, completion.name.count)
+        let matched = String(completion.name.prefix(prefixLength))
+        let remainder = String(completion.name.dropFirst(prefixLength))
+        let matchedText = Text(matched)
+            .fontWeight(.bold)
+            .foregroundColor(Color(red: 0.78, green: 0.88, blue: 1.0))
+        let remainderText = Text(remainder)
+            .foregroundColor(selected ? .white : Color.white.opacity(0.68))
+        let hintText = Text(completion.argumentHint.map { "  \($0)" } ?? "")
+            .foregroundColor(Color.white.opacity(0.48))
+        return (matchedText + remainderText + hintText)
+            .font(.system(size: 10, weight: selected ? .semibold : .regular, design: .monospaced))
+            .lineLimit(1)
     }
 }
 

@@ -9,6 +9,8 @@ const execFileAsync = promisify(execFile);
 export type Completion = {
   name: string;
   description?: string;
+  argumentHint?: string;
+  typedPrefix: string;
   insertValue: string;
   icon?: string;
   kind: "command" | "option" | "argument";
@@ -107,13 +109,22 @@ function visible(suggestions: FigSuggestion[], partial: string, kind: Completion
     .filter((item) => item.name.trim().length > 0 && item.name.toLowerCase().startsWith(partial.toLowerCase()))
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.name.localeCompare(b.name))
     .slice(0, 12)
-    .map((item) => ({
-      name: item.name,
-      description: item.description,
-      insertValue: Array.isArray(item.insertValue) ? item.insertValue[0] ?? item.name : item.insertValue ?? item.name,
-      icon: item.icon,
-      kind,
-    }));
+    .map((item) => {
+      const args = Array.isArray(item.args) ? item.args : item.args ? [item.args] : [];
+      const argument = args[0];
+      const argumentHint = argument?.name
+        ? argument.isOptional ? `[${argument.name}]` : `<${argument.name}>`
+        : undefined;
+      return {
+        name: item.name,
+        description: item.description,
+        argumentHint,
+        typedPrefix: partial,
+        insertValue: Array.isArray(item.insertValue) ? item.insertValue[0] ?? item.name : item.insertValue ?? item.name,
+        icon: item.icon,
+        kind,
+      };
+    });
 }
 
 export async function complete(line: string, cwd = process.cwd()): Promise<Completion[]> {

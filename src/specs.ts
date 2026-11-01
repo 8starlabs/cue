@@ -25,6 +25,7 @@ type FigSuggestion = {
   icon?: string;
   insertValue?: string | string[];
   priority?: number;
+  args?: FigArgument | FigArgument[];
 };
 
 type FigGenerator = {
