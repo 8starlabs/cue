@@ -25,6 +25,28 @@ zle -C cue_complete_widget menu-select _cue_completion
 zstyle ':completion:cue_complete_widget:*' menu yes select=1
 bindkey '^I' cue_complete_widget
 
+# Enter accepts the first live suggestion when the cursor is at the end of a
+# command word. A second Enter runs the completed command as usual.
+_cue_accept_widget() {
+  local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
+  if [[ -f "$engine" && "$BUFFER" == *[[:space:]]* && "$BUFFER" != *[[:space:]] ]]; then
+    local selected description
+    IFS= read -r -d '' selected < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
+    if [[ -n "$selected" ]]; then
+      local current="${LBUFFER##*[[:space:]]}"
+      local prefix="${LBUFFER[1,$(( ${#LBUFFER} - ${#current} ))]}"
+      local trailing="${RBUFFER}"
+      BUFFER="${prefix}${selected}${trailing}"
+      CURSOR=$((${#prefix} + ${#selected}))
+      zle -M ''
+      return
+    fi
+  fi
+  zle .accept-line
+}
+zle -N cue_accept_widget _cue_accept_widget
+bindkey '^M' cue_accept_widget
+
 typeset -g CUE_LIVE_LAST_BUFFER=''
 typeset -g CUE_LIVE_LAST_CURSOR=''
 typeset -gi CUE_PROMPT_WIDTH=0
