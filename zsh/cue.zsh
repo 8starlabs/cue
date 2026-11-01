@@ -32,6 +32,7 @@ typeset -gi CUE_SELECTED_INDEX=0
 typeset -ga CUE_MATCHES
 typeset -gi CUE_CURSOR_ROW=0
 typeset -gi CUE_CURSOR_COLUMN=0
+typeset -gi CUE_SUPPRESS_UNTIL_SPACE=0
 
 _cue_query_terminal_cursor() {
   local cursor_delta="${1:-0}"
@@ -127,6 +128,7 @@ _cue_accept_widget() {
       BUFFER="${prefix}${selected}${trailing}"
       CURSOR=$((${#prefix} + ${#selected}))
       CUE_SELECTED_INDEX=0
+      CUE_SUPPRESS_UNTIL_SPACE=1
       zle -M ''
       return
     fi
@@ -154,12 +156,20 @@ _cue_live_watch() {
 
   [[ -S "$CUE_SOCKET" ]] || return
   local line="$BUFFER"
+  if (( CUE_SUPPRESS_UNTIL_SPACE )); then
+    if (( CURSOR == ${#BUFFER} )) && [[ "$BUFFER" == *[[:space:]] ]]; then
+      CUE_SUPPRESS_UNTIL_SPACE=0
+    else
+      line=''
+    fi
+  fi
   if (( CURSOR != ${#BUFFER} )); then
     line=''
-    CUE_CURSOR_ROW=0
-    CUE_CURSOR_COLUMN=0
   elif [[ -n "$line" ]]; then
     _cue_query_terminal_cursor "$(( CURSOR - old_cursor ))"
+  else
+    CUE_CURSOR_ROW=0
+    CUE_CURSOR_COLUMN=0
   fi
   { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
 }
