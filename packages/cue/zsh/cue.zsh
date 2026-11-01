@@ -192,6 +192,11 @@ _cue_accept_widget() {
 }
 zle -N cue_accept_widget _cue_accept_widget
 bindkey '^M' cue_accept_widget
+bindkey '^J' cue_accept_widget
+bindkey -M emacs '^M' cue_accept_widget
+bindkey -M emacs '^J' cue_accept_widget
+bindkey -M viins '^M' cue_accept_widget
+bindkey -M viins '^J' cue_accept_widget
 
 typeset -g CUE_LIVE_LAST_BUFFER=''
 typeset -g CUE_LIVE_LAST_CURSOR=''
