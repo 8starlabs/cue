@@ -97,7 +97,7 @@ final class CuePanelController {
         hostingView.rootView = CuePanelView(completions: visible, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(390, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(350, size.width), height: size.height))
         if let origin = popupOrigin(metadata: metadata, panelSize: panel.frame.size) {
             panel.setFrameOrigin(origin)
         }
@@ -252,7 +252,7 @@ struct CuePanelView: View {
 
     var body: some View {
         VStack(spacing: 5) {
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top, spacing: 4) {
                 VStack(spacing: 1) {
                     ForEach(Array(completions.enumerated()), id: \.element.id) { index, completion in
                         HStack(spacing: 7) {
@@ -264,7 +264,7 @@ struct CuePanelView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 7)
-                        .frame(width: 205, height: 25)
+                        .frame(width: 203, height: 25)
                         .foregroundStyle(Color.white)
                         .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
                     }
@@ -275,7 +275,7 @@ struct CuePanelView: View {
                         Spacer().frame(height: CGFloat(selectedIndex) * 26)
                     }
                     Text(selected?.description ?? "No additional description")
-                        .font(.system(size: 10))
+                        .font(.system(size: 9).italic())
                         .foregroundStyle(Color(red: 0.86, green: 0.86, blue: 0.88))
                         .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
@@ -284,7 +284,8 @@ struct CuePanelView: View {
                         .background(Color(red: 0.23, green: 0.23, blue: 0.24), in: RoundedRectangle(cornerRadius: 6))
                     Spacer(minLength: 0)
                 }
-                .frame(width: 175, height: CGFloat(completions.count) * 26, alignment: .topLeading)
+                        .frame(width: 134, alignment: .topLeading)
+                        .frame(minHeight: CGFloat(completions.count) * 26, alignment: .topLeading)
             }
 
             Divider()
@@ -301,7 +302,7 @@ struct CuePanelView: View {
             .frame(height: 19)
         }
         .padding(6)
-        .frame(width: 405)
+        .frame(width: 353)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
     }
