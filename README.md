@@ -32,3 +32,9 @@ See [CONTRIBUTION.md](CONTRIBUTION.md) for setup, checks, and pull request guida
 ## Credits
 
 Cue uses the open-source [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs.
+
+## Contact
+
+Kei Lok — [X](https://www.x.com/keiloktql/) · [LinkedIn](https://www.linkedin.com/in/keiloktql/)
+
+Engineered by [8StarLabs](https://8starlabs.com).
