@@ -32,7 +32,7 @@ bindkey '^I' cue_complete_widget
 # command word. A second Enter runs the completed command as usual.
 _cue_accept_widget() {
   local engine="${CUE_HOME:-$HOME/Applications/Cue}/dist/cli.js"
-  if [[ -f "$engine" && "$BUFFER" == *[[:space:]]* && "$BUFFER" != *[[:space:]] ]]; then
+  if [[ -f "$engine" && "$BUFFER" == *[[:space:]]* ]]; then
     local selected description
     IFS= read -r -d '' selected < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
     if [[ -n "$selected" ]]; then
@@ -64,7 +64,7 @@ _cue_live_watch() {
 
   [[ -S "$CUE_SOCKET" ]] || return
   local line="$BUFFER"
-  if (( CURSOR != ${#BUFFER} )) || [[ "$BUFFER" != *[[:space:]]* || "$BUFFER" == *[[:space:]] ]]; then
+  if (( CURSOR != ${#BUFFER} )); then
     line=''
   fi
   { printf '%s\t%s\t%s\t%s\t%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$PWD" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!

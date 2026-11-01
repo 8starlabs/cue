@@ -349,8 +349,9 @@ final class CueService {
                     return
                 }
                 let terminal = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
-                var focusedWindow: CFTypeRef?
-                if AXUIElementCopyAttributeValue(terminal, kAXFocusedWindowAttribute as CFString, &focusedWindow) != .success || focusedWindow == nil {
+                var windowsValue: CFTypeRef?
+                if AXUIElementCopyAttributeValue(terminal, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+                   let windows = windowsValue as? [AXUIElement], windows.isEmpty {
                     self.panelController.hide()
                 }
             }
@@ -479,8 +480,11 @@ final class CueService {
                     DispatchQueue.main.async {
                         self.model.completions = response.completions
                         self.model.selectedIndex = 0
-                        if response.completions.isEmpty { self.panelController.hide() }
-                        else { self.panelController.show(response.completions, metadata: metadata) }
+                        if !response.completions.isEmpty {
+                            self.panelController.show(response.completions, metadata: metadata)
+                        } else if metadata.line.isEmpty || metadata.line.last?.isWhitespace == true {
+                            self.panelController.hide()
+                        }
                     }
                 }
                 if self.latestRequest != nil { self.sendLatestRequest() }
