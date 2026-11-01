@@ -84,7 +84,7 @@ final class CuePanelController {
     init(model: CueModel) {
         self.model = model
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -127,7 +127,7 @@ final class CuePanelController {
         hostingView.rootView = CuePanelView(completions: visibleCompletions, selectedIndex: selectedIndex)
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
-        panel.setContentSize(NSSize(width: max(211, size.width), height: size.height))
+        panel.setContentSize(NSSize(width: max(320, size.width), height: size.height))
         detailsHostingView.rootView = CueDetailView(description: visibleCompletions.first?.description ?? "")
         detailsHostingView.layoutSubtreeIfNeeded()
         let detailsSize = detailsHostingView.fittingSize
@@ -312,13 +312,13 @@ struct CuePanelView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 5)
-                .frame(width: 203, height: 22)
+                .frame(width: 312, height: 22)
                 .foregroundStyle(Color.white)
                 .background(index == selectedIndex ? Color(red: 0.18, green: 0.39, blue: 0.82) : Color.clear, in: RoundedRectangle(cornerRadius: 5))
             }
         }
         .padding(4)
-        .frame(width: 211)
+        .frame(width: 320)
         .background(Color(red: 0.18, green: 0.18, blue: 0.19), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.27, green: 0.27, blue: 0.28), lineWidth: 1))
     }
