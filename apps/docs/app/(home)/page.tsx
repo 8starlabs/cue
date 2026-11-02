@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Check, Command, Folder, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowUpRight, Check, Command, Folder, Sparkles } from "lucide-react";
 import { CommandDemo } from "@/components/command-demo";
+import { CueMark } from "@/components/cue-mark";
+import { InstallCommand } from "@/components/install-command";
 
 const capabilities = [
   {
@@ -21,27 +22,13 @@ const capabilities = [
   },
 ];
 
-function StarMark({ className = "" }: { className?: string }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 32 32" className={className} fill="none">
-      <path
-        d="M16 2v28M2 16h28M6.1 6.1l19.8 19.8m0-19.8L6.1 25.9"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle cx="16" cy="16" r="3" fill="currentColor" />
-    </svg>
-  );
-}
-
 export default function HomePage() {
   return (
     <main className="cue-home flex-1">
       <section className="hero-shell">
         <div className="hero-copy">
           <div className="hero-brand">
-            <StarMark className="h-8 w-8" />
+            <CueMark className="h-8 w-8" />
             <span>Cue</span>
           </div>
           <h1>
@@ -53,15 +40,9 @@ export default function HomePage() {
             stay on the prompt.
           </p>
           <div className="hero-actions">
-            <Button
-              render={<Link href="/docs/getting-started" />}
-              nativeButton={false}
-              className="hero-primary"
-            >
-              Get started <ArrowRight aria-hidden="true" />
-            </Button>
+            <InstallCommand />
             <Link href="/docs" className="quiet-link">
-              Read the guides <ArrowUpRight aria-hidden="true" />
+              Read the docs <ArrowUpRight aria-hidden="true" />
             </Link>
           </div>
           <ul className="hero-features" aria-label="Cue features">
@@ -123,11 +104,50 @@ export default function HomePage() {
       </section>
 
       <footer className="home-footer">
-        <span>Made for the place where work starts.</span>
-        <Link href="/docs">
-          Cue documentation <ArrowRight size={14} />
-        </Link>
-        <span>8StarLabs · 2026</span>
+        <div className="home-footer-inner">
+          <div className="home-footer-main">
+            <div className="home-footer-about">
+              <Link href="/" className="footer-brand" aria-label="Cue home">
+                <CueMark className="h-7 w-7" />
+                <span>Cue</span>
+              </Link>
+              <p>Autocomplete that brings a little more flow to Apple Terminal.</p>
+              <div className="footer-contact">
+                <span>Kei Lok</span>
+                <a href="https://www.x.com/keiloktql/" aria-label="Kei Lok on X">
+                  X
+                </a>
+                <a href="https://www.linkedin.com/in/keiloktql/" aria-label="Kei Lok on LinkedIn">
+                  in
+                </a>
+              </div>
+            </div>
+
+            <nav className="footer-link-groups" aria-label="Footer">
+              <div className="footer-link-group">
+                <h2>Explore</h2>
+                <Link href="/docs">Documentation</Link>
+                <Link href="/docs/getting-started">Getting started</Link>
+                <Link href="/docs/keyboard-controls">Keyboard controls</Link>
+              </div>
+              <div className="footer-link-group">
+                <h2>Project</h2>
+                <a href="https://github.com/8starlabs/cue">GitHub</a>
+                <a href="https://github.com/8starlabs/cue/blob/main/CONTRIBUTION.md">
+                  Contributing
+                </a>
+                <a href="https://8starlabs.com">8StarLabs</a>
+              </div>
+            </nav>
+          </div>
+
+          <div className="home-footer-bottom">
+            <span>© 2026 8StarLabs · Engineered by 8StarLabs</span>
+            <a href="https://github.com/8starlabs/cue" className="footer-source-link">
+              Open source on GitHub <ArrowUpRight size={14} aria-hidden="true" />
+            </a>
+          </div>
+        </div>
       </footer>
     </main>
   );

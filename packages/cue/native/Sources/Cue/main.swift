@@ -43,6 +43,18 @@ private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
 private let suggestionRowHeight: CGFloat = 18
 
+private enum PopupSide: Equatable {
+    case belowCaret
+    case aboveCaret
+    case constrained
+}
+
+private struct PopupPosition {
+    let origin: NSPoint
+    let side: PopupSide
+    let caretAnchorY: CGFloat?
+}
+
 final class CueModel: ObservableObject {
     @Published var completions: [Completion] = []
     @Published var selectedIndex = 0
@@ -84,6 +96,7 @@ final class CuePanelController {
     private var hasAcceptedSelection = false
     private var acceptedSelectionBuffer: String?
     private var listOrigin = NSPoint.zero
+    private var popupSide = PopupSide.constrained
     private var activeVisibleFrame: CGRect?
     private var terminalWindowRect: CGRect?
     private var latestMetadata: RequestMetadata?
@@ -93,6 +106,9 @@ final class CuePanelController {
     private let panelGap: CGFloat = 4
     private let caretPopupGap: CGFloat = 5
     var isVisible: Bool { panel.isVisible }
+    private var acceptedCodeCurrentDirectory: Bool {
+        hasAcceptedSelection && acceptedSelectionBuffer == "code ."
+    }
 
     init(model: CueModel) {
         self.model = model
@@ -139,6 +155,20 @@ final class CuePanelController {
         let previousTopY = panel.frame.maxY
         let wasVisible = panel.isVisible
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
+        if metadata.action == "selected", metadata.line == "code ." {
+            if let currentDirectoryIndex = visibleCompletions.firstIndex(where: {
+                $0.name == "." && $0.insertValue == "."
+            }) {
+                let currentDirectory = visibleCompletions.remove(at: currentDirectoryIndex)
+                visibleCompletions.insert(currentDirectory, at: 0)
+            }
+        } else if metadata.action == "selected",
+                  let parentIndex = visibleCompletions.firstIndex(where: { $0.name == "../" }) {
+            let parent = visibleCompletions.remove(at: parentIndex)
+            visibleCompletions.insert(parent, at: 0)
+        } else if let parent = parentDirectoryCompletion(for: metadata) {
+            visibleCompletions.insert(parent, at: 0)
+        }
         if metadata.action == "selected" {
             acceptedSelectionBuffer = metadata.line
         } else if metadata.line != acceptedSelectionBuffer {
@@ -150,7 +180,8 @@ final class CuePanelController {
         latestMetadata = metadata
         renderPanel()
         let combinedSize = combinedPanelSize
-        if var origin = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+        if let position = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+            var origin = position.origin
             let acceptedDirectory = metadata.action == "selected"
             let sameCaretRow = previousMetadata.map {
                 $0.terminalRow > 0 &&
@@ -161,12 +192,24 @@ final class CuePanelController {
                     ($0.line.hasPrefix(metadata.line) || metadata.line.hasPrefix($0.line))
             } ?? false
             let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect)
-            if wasVisible && sameWindow && (acceptedDirectory || sameCaretRow) {
-                let minimumY = (activeVisibleFrame?.minY ?? 0) + 8
+            if wasVisible && sameWindow && popupSide == position.side &&
+                position.side != .constrained && (acceptedDirectory || sameCaretRow),
+               let caretAnchorY = position.caretAnchorY {
+                let visible = activeVisibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+                let minimumY = visible.minY + 8
                 let preservedY = previousTopY - panel.frame.height
-                if preservedY >= minimumY { origin.y = preservedY }
+                let preservedMaxY = preservedY + panel.frame.height
+                let staysOnSameSide = position.side == .belowCaret
+                    ? preservedMaxY <= caretAnchorY - caretPopupGap
+                    : preservedY >= caretAnchorY + caretPopupGap
+                if preservedY >= minimumY,
+                   preservedMaxY <= visible.maxY - 8,
+                   staysOnSameSide {
+                    origin.y = preservedY
+                }
             }
             listOrigin = origin
+            popupSide = position.side
             panel.setFrameOrigin(listOrigin)
             if !descriptionAtBottom { positionDetailsPanel() }
         }
@@ -186,6 +229,7 @@ final class CuePanelController {
         acceptedSelectionBuffer = nil
         terminalWindowRect = nil
         latestMetadata = nil
+        popupSide = .constrained
         unregisterLayoutHotKey()
     }
 
@@ -212,9 +256,36 @@ final class CuePanelController {
     }
 
     private func renderPanel() {
-        let displayCompletions = hasAcceptedSelection
-            ? [Completion(name: "↵", displayName: nil, description: "Enter the current directory", argumentHint: nil, typedPrefix: "", insertValue: "", replaceValue: nil, icon: nil, type: nil, isDangerous: nil, deprecated: nil, kind: "enter")] + visibleCompletions
-            : visibleCompletions
+        let enterOption = Completion(
+            name: "↵",
+            displayName: nil,
+            description: acceptedCodeCurrentDirectory ? "Open the current directory" : "Enter the current directory",
+            argumentHint: nil,
+            typedPrefix: "",
+            insertValue: "",
+            replaceValue: nil,
+            icon: nil,
+            type: nil,
+            isDangerous: nil,
+            deprecated: nil,
+            kind: "enter"
+        )
+        let displayCompletions: [Completion]
+        if acceptedCodeCurrentDirectory {
+            var suggestions = visibleCompletions
+            if let currentDirectoryIndex = suggestions.firstIndex(where: {
+                $0.name == "." && $0.insertValue == "."
+            }) {
+                let currentDirectory = suggestions.remove(at: currentDirectoryIndex)
+                suggestions.insert(currentDirectory, at: 0)
+            }
+            suggestions.insert(enterOption, at: min(1, suggestions.count))
+            displayCompletions = suggestions
+        } else if hasAcceptedSelection {
+            displayCompletions = [enterOption] + visibleCompletions
+        } else {
+            displayCompletions = visibleCompletions
+        }
         let description = displayCompletions.indices.contains(selectedIndex)
             ? displayCompletions[selectedIndex].description ?? ""
             : ""
@@ -239,9 +310,10 @@ final class CuePanelController {
         descriptionAtBottom.toggle()
         renderPanel()
         if let latestMetadata,
-           let origin = popupOrigin(metadata: latestMetadata, panelSize: combinedPanelSize) {
-            listOrigin = origin
-            panel.setFrameOrigin(origin)
+           let position = popupOrigin(metadata: latestMetadata, panelSize: combinedPanelSize) {
+            listOrigin = position.origin
+            popupSide = position.side
+            panel.setFrameOrigin(position.origin)
         }
         if descriptionAtBottom {
             detailsPanel.orderOut(nil)
@@ -298,7 +370,52 @@ final class CuePanelController {
         detailsPanel.setFrameOrigin(NSPoint(x: listOrigin.x + panel.frame.width + panelGap, y: detailsY))
     }
 
-    private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> NSPoint? {
+    private func parentDirectoryCompletion(for metadata: RequestMetadata) -> Completion? {
+        guard metadata.action == "selected" else { return nil }
+        let line = metadata.line.trimmingCharacters(in: .whitespaces)
+        guard line == "cd" || line.hasPrefix("cd "),
+              !line.contains("\""), !line.contains("'"), !line.contains("\\") else { return nil }
+
+        let partial = line == "cd" ? "" : String(line.dropFirst(3))
+        let slash = partial.lastIndex(of: "/")
+        let directoryPrefix = slash.map { String(partial[...$0]) } ?? ""
+        let namePrefix = slash.map { String(partial[partial.index(after: $0)...]) } ?? partial
+        guard namePrefix.isEmpty || namePrefix.hasPrefix(".") else { return nil }
+
+        let targetPath: String
+        if directoryPrefix.hasPrefix("~/") {
+            targetPath = NSHomeDirectory() + directoryPrefix.dropFirst()
+        } else if directoryPrefix.hasPrefix("$HOME/") {
+            targetPath = NSHomeDirectory() + directoryPrefix.dropFirst(5)
+        } else if directoryPrefix.hasPrefix("/") {
+            targetPath = directoryPrefix
+        } else if directoryPrefix.isEmpty {
+            targetPath = metadata.cwd
+        } else {
+            targetPath = URL(fileURLWithPath: metadata.cwd, isDirectory: true)
+                .appendingPathComponent(directoryPrefix).path
+        }
+
+        let standardizedTarget = URL(fileURLWithPath: targetPath, isDirectory: true).standardizedFileURL.path
+        guard standardizedTarget != "/" else { return nil }
+
+        return Completion(
+            name: "../",
+            displayName: nil,
+            description: "Parent folder",
+            argumentHint: nil,
+            typedPrefix: namePrefix,
+            insertValue: "\(directoryPrefix)../",
+            replaceValue: nil,
+            icon: "fig://icon?type=folder",
+            type: nil,
+            isDangerous: false,
+            deprecated: false,
+            kind: "argument"
+        )
+    }
+
+    private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> PopupPosition? {
         let terminalPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         let app = AXUIElementCreateApplication(terminalPID)
         var windowValue: CFTypeRef?
@@ -400,15 +517,28 @@ final class CuePanelController {
             y = visible.minY + 110
         }
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-        let minY = visible.minY + 8
-        if y < minY {
-            if let caretAnchorY, caretAnchorY + panelSize.height + 8 <= visible.maxY {
-                y = caretAnchorY + 2
+        let edgePadding: CGFloat = 8
+        let maxOriginY = max(visible.minY + edgePadding, visible.maxY - panelSize.height - edgePadding)
+        var side = PopupSide.constrained
+        if let caretAnchorY {
+            let availableBelow = caretAnchorY - visible.minY - edgePadding - caretPopupGap
+            let availableAbove = visible.maxY - caretAnchorY - edgePadding - caretPopupGap
+            if availableBelow >= panelSize.height {
+                y = caretAnchorY - panelSize.height - caretPopupGap
+                side = .belowCaret
+            } else if availableAbove >= panelSize.height {
+                y = caretAnchorY + caretPopupGap
+                side = .aboveCaret
+            } else if availableAbove > availableBelow {
+                y = caretAnchorY + caretPopupGap
             } else {
-                y = minY
+                y = caretAnchorY - panelSize.height - caretPopupGap
             }
         }
-        return NSPoint(x: x, y: y)
+        y = min(max(y, visible.minY + edgePadding), maxOriginY)
+        let maxOriginX = max(visible.minX + edgePadding, visible.maxX - panelSize.width - edgePadding)
+        x = min(max(x, visible.minX + edgePadding), maxOriginX)
+        return PopupPosition(origin: NSPoint(x: x, y: y), side: side, caretAnchorY: caretAnchorY)
     }
 
     private func rectsMatch(_ lhs: CGRect?, _ rhs: CGRect?) -> Bool {

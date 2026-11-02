@@ -11,6 +11,12 @@ import { loadLocalSpec, loadModuleSpec, loadSpec, loadSpecLocation } from "./spe
 const execFileAsync = promisify(execFile);
 const MAX_SUGGESTIONS = 50;
 const DIRECTORY_CACHE_TTL_MS = 300;
+const currentDirectoryDefaults: Record<string, string> = {
+  ls: "List the current directory",
+  find: "Search from the current directory",
+  du: "Show disk usage for the current directory",
+  tree: "List the current directory as a tree",
+};
 const directoryEntriesCache = new Map<string, { entries: Dirent[]; expiresAt: number }>();
 const generatorCache = new WeakMap<
   FigGenerator,
@@ -714,15 +720,14 @@ async function completeDirectories(partial: string, cwd: string): Promise<Comple
   }
 
   const suggestions: Completion[] = [];
-  // Keep the parent shortcut available for paths such as `src/components/`,
-  // but don't offer it again after the user has entered a parent traversal.
-  // Otherwise accepting the same-looking `../` row repeatedly grows the
-  // buffer forever (`../` -> `../../` -> `../../../` ...).
-  const isAlreadyTraversingParents = directoryPrefix.split("/").filter(Boolean).at(-1) === "..";
-  const parentWasRequested = directoryPrefix.length === 0 || namePrefix.startsWith(".");
+  // Keep parent navigation at the top while browsing any directory level. The
+  // `cd` completion path exits above once a completed path is followed by a
+  // space, so this row cannot leak into the next argument.
+  const parentWasRequested =
+    directoryPrefix.length === 0 || namePrefix.length === 0 || namePrefix.startsWith(".");
   if (
     parentWasRequested &&
-    !isAlreadyTraversingParents &&
+    target !== path.parse(target).root &&
     "..".startsWith(namePrefix) &&
     suggestions.length < MAX_SUGGESTIONS
   ) {
@@ -777,6 +782,16 @@ async function completeCodePaths(partial: string, cwd: string): Promise<Completi
   }
 
   const suggestions: Completion[] = [];
+  if (partial === "" || partial === ".") {
+    suggestions.push({
+      name: ".",
+      description: "Current directory",
+      typedPrefix: partial,
+      insertValue: ".",
+      icon: "fig://icon?type=folder",
+      kind: "argument",
+    });
+  }
   for (const entry of entries) {
     if (entry.name.startsWith(".") && !namePrefix.startsWith(".")) continue;
     if (!entry.name.toLowerCase().startsWith(namePrefix.toLowerCase())) continue;
@@ -802,8 +817,9 @@ async function completeCodePaths(partial: string, cwd: string): Promise<Completi
   return suggestions
     .sort(
       (a, b) =>
-        (a.kind === "argument" && a.name.endsWith("/") ? 0 : 1) -
-          (b.kind === "argument" && b.name.endsWith("/") ? 0 : 1) || a.name.localeCompare(b.name),
+        (a.name === "." ? -1 : a.kind === "argument" && a.name.endsWith("/") ? 0 : 1) -
+          (b.name === "." ? -1 : b.kind === "argument" && b.name.endsWith("/") ? 0 : 1) ||
+        a.name.localeCompare(b.name),
     )
     .slice(0, MAX_SUGGESTIONS);
 }
@@ -922,15 +938,14 @@ export async function complete(
     return completeDirectories(parsed.partial, cwd);
   }
 
-  const loadedRoot = rootOverride ?? (await loadSpec(commandName, cwd, shellEnvironment));
-  if (!loadedRoot) return [];
-
-  // `code` accepts file and folder paths as its ordinary arguments. Show those
-  // at the blank/partial argument instead of flooding the popup with flags;
-  // users can still reach every CLI option by starting it with `-`.
+  // `code` accepts file and folder paths as its ordinary arguments. Handle
+  // those before loading its Fig spec so path completion stays immediate.
   if (commandName === "code" && !parsed.partial.startsWith("-")) {
     return completeCodePaths(parsed.partial, cwd);
   }
+
+  const loadedRoot = rootOverride ?? (await loadSpec(commandName, cwd, shellEnvironment));
+  if (!loadedRoot) return [];
 
   const root = await enrichSpec(loadedRoot, parsed.tokens, cwd, shellEnvironment);
   const { spec, remaining, ancestors } = await findActiveSpec(
@@ -1167,6 +1182,24 @@ export async function complete(
     argumentSuggestions.unshift({
       name: ".",
       description: "Stage changes in the current directory",
+      typedPrefix: argumentPartial,
+      insertValue: ".",
+      isDangerous: false,
+      kind: "enter",
+      priority: 101,
+    });
+  }
+
+  const currentDirectoryDescription = currentDirectoryDefaults[commandName];
+  const suggestsCurrentDirectoryByDefault =
+    currentDirectoryDescription !== undefined &&
+    spec.name === commandName &&
+    argumentContext.positionalEntries.length === 0 &&
+    (argumentPartial === "" || argumentPartial === ".");
+  if (suggestsCurrentDirectoryByDefault) {
+    argumentSuggestions.unshift({
+      name: ".",
+      description: currentDirectoryDescription,
       typedPrefix: argumentPartial,
       insertValue: ".",
       isDangerous: false,

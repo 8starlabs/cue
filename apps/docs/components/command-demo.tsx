@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, CornerDownLeft, FolderGit2, GitBranch, Sparkles } from "lucide-react";
 
 const suggestions = [
@@ -25,12 +25,38 @@ const suggestions = [
 ];
 
 const closeDuration = 150;
+const demoCommand = "git ch";
 
 export function CommandDemo() {
   const [open, setOpen] = useState(true);
   const [closing, setClosing] = useState(false);
+  const [typedCommand, setTypedCommand] = useState("");
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = suggestions[0];
+  const suggestionsVisible = open && typedCommand === demoCommand;
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setTypedCommand(demoCommand);
+      return;
+    }
+
+    let index = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function typeNextCharacter() {
+      index += 1;
+      setTypedCommand(demoCommand.slice(0, index));
+
+      if (index < demoCommand.length) {
+        timer = setTimeout(typeNextCharacter, 110);
+      }
+    }
+
+    timer = setTimeout(typeNextCharacter, 550);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   function openDropdown() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -61,7 +87,7 @@ export function CommandDemo() {
         <button
           className="demo-toggle"
           onClick={toggle}
-          aria-expanded={open}
+          aria-expanded={suggestionsVisible}
           aria-controls="cue-demo-suggestions"
           aria-label={open ? "Hide command suggestions" : "Show command suggestions"}
         >
@@ -76,17 +102,17 @@ export function CommandDemo() {
           <span className="terminal-at">@</span>
           <span className="terminal-host">terminal</span>
           <span className="terminal-prompt"> % </span>
-          <span>git ch</span>
+          <span>{typedCommand}</span>
           <span className="terminal-caret" aria-hidden="true" />
         </div>
         <div className="suggestion-anchor">
           <div
             id="cue-demo-suggestions"
-            className={`t-dropdown suggestion-menu ${open ? "is-open" : ""} ${closing ? "is-closing" : ""}`}
+            className={`t-dropdown suggestion-menu ${suggestionsVisible ? "is-open" : ""} ${closing ? "is-closing" : ""}`}
             data-origin="top-left"
             role="listbox"
             aria-label="Git command suggestions"
-            aria-hidden={!open}
+            aria-hidden={!suggestionsVisible}
           >
             {suggestions.map(({ command, hint, icon: Icon }, index) => (
               <div
@@ -110,7 +136,10 @@ export function CommandDemo() {
               </span>
             </div>
           </div>
-          <div className={`suggestion-description ${open ? "is-visible" : ""}`} aria-hidden={!open}>
+          <div
+            className={`suggestion-description ${suggestionsVisible ? "is-visible" : ""}`}
+            aria-hidden={!suggestionsVisible}
+          >
             <span className="description-kicker">COMMAND</span>
             <strong>{selected.command}</strong>
             <p>{selected.description}</p>

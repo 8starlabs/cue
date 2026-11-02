@@ -1,6 +1,6 @@
 # Homebrew release checklist
 
-Homebrew distribution is prepared but not installable until the first release archive is published. The tap formula stays in `Formula/cue.rb` in this same repository; do not create or copy it to a separate tap repository.
+The published tap formula stays in `Formula/cue.rb` in this repository; no separate tap repository is needed. Use this checklist to publish a new version or update.
 
 1. Set the same version in `packages/cue/package.json`, the workspace `package.json`, and `Formula/cue.rb`. Set the formula URL to the matching `v<version>` release archive URL.
 2. Run `pnpm release:cue`. It builds a self-contained macOS app and creates `release-assets/cue-<version>-macos-<architecture>.tar.gz`; the command prints its SHA-256 checksum.

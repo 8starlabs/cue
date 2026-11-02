@@ -63,6 +63,76 @@ describe("Fig-style completion specs", () => {
     expect(nextPath.some(({ name, kind }) => name === "." && kind === "enter")).toBe(false);
   });
 
+  it("offers the current directory by default for directory listing and search commands", async () => {
+    const specs: FigSpec[] = [
+      {
+        name: "ls",
+        args: { isVariadic: true, template: ["filepaths", "folders"] },
+        options: [{ name: "-a" }],
+      },
+      {
+        name: "find",
+        args: { isOptional: true, isVariadic: true, template: "folders" },
+      },
+      {
+        name: "du",
+        args: { isOptional: true, isVariadic: true, template: ["filepaths", "folders"] },
+      },
+      { name: "tree", args: { template: "folders" } },
+    ];
+
+    for (const spec of specs) {
+      for (const line of [spec.name, `${spec.name} `]) {
+        const suggestions = await complete(line, workspace, spec);
+        expect(suggestions[0]).toMatchObject({
+          name: ".",
+          description: expect.any(String),
+          insertValue: ".",
+          kind: "enter",
+        });
+      }
+    }
+
+    const lsSuggestions = await complete("ls", workspace, specs[0]);
+    expect(lsSuggestions.some(({ name }) => name === "-a")).toBe(true);
+  });
+
+  it("does not default the current directory for destructive or later path arguments", async () => {
+    const rmSpec: FigSpec = {
+      name: "rm",
+      args: { isVariadic: true, template: ["filepaths", "folders"] },
+      options: [{ name: "-r" }],
+    };
+
+    const rmSuggestions = await complete("rm", workspace, rmSpec);
+    expect(rmSuggestions.some(({ kind }) => kind === "enter")).toBe(false);
+
+    const lsSpec: FigSpec = {
+      name: "ls",
+      args: { isVariadic: true, template: ["filepaths", "folders"] },
+    };
+    const laterPath = await complete("ls src ", workspace, lsSpec);
+    expect(laterPath.some(({ name, kind }) => name === "." && kind === "enter")).toBe(false);
+  });
+
+  it("keeps parent navigation available after each ../ path segment", async () => {
+    const firstParent = await complete("cd ../", workspace);
+    expect(firstParent[0]).toMatchObject({
+      name: "../",
+      description: "Parent folder",
+      insertValue: "../../",
+    });
+
+    const secondParent = await complete("cd ../../", workspace);
+    expect(secondParent[0]).toMatchObject({
+      name: "../",
+      description: "Parent folder",
+      insertValue: "../../../",
+    });
+
+    await expect(complete("cd ../ ", workspace)).resolves.toEqual([]);
+  });
+
   it("suggests nested commands and their aliases with descriptions", async () => {
     const spec: FigSpec = {
       name: "tool",
@@ -214,5 +284,17 @@ describe("Fig-style completion specs", () => {
     expect(folders).not.toContain("README.md");
     expect(redirectedFiles).toContain("README.md");
     expect(piped.map(({ name }) => name)).toEqual(["cue"]);
+  });
+
+  it("offers the current directory before code path completions", async () => {
+    for (const line of ["code", "code ."]) {
+      const suggestions = await complete(line, workspace);
+      expect(suggestions[0]).toMatchObject({
+        name: ".",
+        description: "Current directory",
+        insertValue: ".",
+        icon: "fig://icon?type=folder",
+      });
+    }
   });
 });

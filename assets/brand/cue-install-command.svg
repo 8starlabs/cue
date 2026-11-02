@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="118" viewBox="0 0 660 118" role="img" aria-labelledby="title description">
+  <title id="title">Install Cue with Homebrew</title>
+  <desc id="description">Run brew install 8starlabs/cue/cue in Terminal.</desc>
+  <rect x="1" y="1" width="658" height="116" rx="12" fill="#111315" stroke="#373A3C" stroke-width="2" />
+  <circle cx="24" cy="24" r="5" fill="#EF6258" />
+  <circle cx="42" cy="24" r="5" fill="#E8B44D" />
+  <circle cx="60" cy="24" r="5" fill="#55BD66" />
+  <text x="82" y="28" fill="#A7ADB0" font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600" letter-spacing=".8">INSTALL WITH HOMEBREW</text>
+  <path d="M18 42H642" stroke="#2D3032" />
+  <text x="24" y="83" fill="#8FAF98" font-family="Menlo, Monaco, 'SFMono-Regular', monospace" font-size="18">$</text>
+  <text x="48" y="83" fill="#F2F3F4" font-family="Menlo, Monaco, 'SFMono-Regular', monospace" font-size="18">brew install 8starlabs/cue/cue</text>
+  <g transform="translate(613 65)" fill="none" stroke="#A7ADB0" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+    <rect x="0" y="5" width="18" height="19" rx="3" />
+    <path d="M6 1h17a3 3 0 0 1 3 3v18" />
+  </g>
+</svg>

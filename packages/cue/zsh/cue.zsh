@@ -109,7 +109,18 @@ _cue_matches() {
     done < <(CUE_CWD="$PWD" node "$engine" --zsh "$LBUFFER" 2>/dev/null)
   fi
   if [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]]; then
-    CUE_MATCHES=("__cue_enter_current_directory__" "${CUE_MATCHES[@]}")
+    if [[ "$BUFFER" == "code ." ]] && (( ${#CUE_MATCHES} > 0 )); then
+      local -a ordered_matches=("${CUE_MATCHES[1]}" "__cue_enter_current_directory__")
+      local -a ordered_replacements=("${CUE_REPLACEMENTS[1]}" '')
+      if (( ${#CUE_MATCHES} > 1 )); then
+        ordered_matches+=("${CUE_MATCHES[2,-1]}")
+        ordered_replacements+=("${CUE_REPLACEMENTS[2,-1]}")
+      fi
+      CUE_MATCHES=("${ordered_matches[@]}")
+      CUE_REPLACEMENTS=("${ordered_replacements[@]}")
+    else
+      CUE_MATCHES=("__cue_enter_current_directory__" "${CUE_MATCHES[@]}")
+    fi
   fi
   CUE_MATCHES_BUFFER="$BUFFER"
   CUE_MATCHES_CWD="$PWD"
@@ -283,6 +294,9 @@ _cue_complete_selection() {
     # Keep the next path level visible after a folder is accepted. Enter can
     # dismiss that level; another Enter runs cd without editing the path.
     CUE_ACCEPTED_BUFFER=''
+    CUE_ENTER_DISMISS_BUFFER="$BUFFER"
+  elif [[ "$BUFFER" == "code ." ]]; then
+    CUE_ACCEPTED_BUFFER="$BUFFER"
     CUE_ENTER_DISMISS_BUFFER="$BUFFER"
   else
     CUE_ACCEPTED_BUFFER="$BUFFER"

@@ -1,21 +1,20 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 import { appName, gitConfig } from "./shared";
 import { ArrowUpRight } from "lucide-react";
+import { CueMark } from "@/components/cue-mark";
 
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
         <span className="cue-nav-brand">
-          <span className="cue-nav-mark" aria-hidden="true">
-            ✳
-          </span>
+          <CueMark className="cue-nav-mark" />
           <span>{appName}</span>
         </span>
       ),
     },
     links: [
-      { text: "Guides", url: "/docs" },
+      { text: "Docs", url: "/docs" },
       {
         text: "GitHub",
         url: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
