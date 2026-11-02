@@ -7,11 +7,16 @@ import Darwin
 
 struct Completion: Decodable, Identifiable {
     let name: String
+    let displayName: String?
     let description: String?
     let argumentHint: String?
     let typedPrefix: String
     let insertValue: String
+    let replaceValue: String?
     let icon: String?
+    let type: String?
+    let isDangerous: Bool?
+    let deprecated: Bool?
     let kind: String
     var id: String { "\(kind):\(name)" }
 }
@@ -31,15 +36,12 @@ struct RequestMetadata {
     let cwd: String
     let line: String
     let action: String
+    let environmentVariables: [String: String]
 }
 
 private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
 private let suggestionRowHeight: CGFloat = 18
-
-private func suggestionWindowStart(total: Int, selected: Int) -> Int {
-    max(0, min(selected - maximumVisibleSuggestions + 1, total - maximumVisibleSuggestions))
-}
 
 final class CueModel: ObservableObject {
     @Published var completions: [Completion] = []
@@ -78,14 +80,18 @@ final class CuePanelController {
     private let model: CueModel
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
+    private var suggestionWindowStart = 0
     private var hasAcceptedSelection = false
+    private var acceptedSelectionBuffer: String?
     private var listOrigin = NSPoint.zero
     private var activeVisibleFrame: CGRect?
+    private var terminalWindowRect: CGRect?
     private var latestMetadata: RequestMetadata?
-    private var descriptionAtBottom = false
+    private var descriptionAtBottom = true
     private var layoutHotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private let panelGap: CGFloat = 4
+    private let caretPopupGap: CGFloat = 5
     var isVisible: Bool { panel.isVisible }
 
     init(model: CueModel) {
@@ -96,7 +102,7 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, description: "", descriptionAtBottom: false, hasAcceptedSelection: false))
+        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, windowStart: 0, description: "", descriptionAtBottom: false, hasAcceptedSelection: false))
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -111,7 +117,7 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        detailsHostingView = NSHostingView(rootView: CueDetailView(description: "", hasAcceptedSelection: false))
+        detailsHostingView = NSHostingView(rootView: CueDetailView(description: ""))
         detailsPanel.contentView = detailsHostingView
         detailsPanel.isOpaque = false
         detailsPanel.backgroundColor = .clear
@@ -128,13 +134,38 @@ final class CuePanelController {
             return
         }
 
+        let previousMetadata = latestMetadata
+        let previousWindowRect = terminalWindowRect
+        let previousTopY = panel.frame.maxY
+        let wasVisible = panel.isVisible
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
+        if metadata.action == "selected" {
+            acceptedSelectionBuffer = metadata.line
+        } else if metadata.line != acceptedSelectionBuffer {
+            acceptedSelectionBuffer = nil
+        }
+        hasAcceptedSelection = acceptedSelectionBuffer != nil
         selectedIndex = 0
-        hasAcceptedSelection = metadata.action == "selected"
+        suggestionWindowStart = 0
         latestMetadata = metadata
         renderPanel()
         let combinedSize = combinedPanelSize
-        if let origin = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+        if var origin = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+            let acceptedDirectory = metadata.action == "selected"
+            let sameCaretRow = previousMetadata.map {
+                $0.terminalRow > 0 &&
+                    $0.terminalRow == metadata.terminalRow &&
+                    $0.columns == metadata.columns &&
+                    $0.lines == metadata.lines &&
+                    $0.cwd == metadata.cwd &&
+                    ($0.line.hasPrefix(metadata.line) || metadata.line.hasPrefix($0.line))
+            } ?? false
+            let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect)
+            if wasVisible && sameWindow && (acceptedDirectory || sameCaretRow) {
+                let minimumY = (activeVisibleFrame?.minY ?? 0) + 8
+                let preservedY = previousTopY - panel.frame.height
+                if preservedY >= minimumY { origin.y = preservedY }
+            }
             listOrigin = origin
             panel.setFrameOrigin(listOrigin)
             if !descriptionAtBottom { positionDetailsPanel() }
@@ -150,14 +181,25 @@ final class CuePanelController {
         detailsPanel.orderOut(nil)
         visibleCompletions = []
         selectedIndex = 0
+        suggestionWindowStart = 0
         hasAcceptedSelection = false
+        acceptedSelectionBuffer = nil
+        terminalWindowRect = nil
         latestMetadata = nil
         unregisterLayoutHotKey()
     }
 
     func select(_ index: Int) {
         guard !visibleCompletions.isEmpty else { return }
-        selectedIndex = min(max(0, index), visibleCompletions.count - 1)
+        let lastDisplayIndex = visibleCompletions.count - 1 + (hasAcceptedSelection ? 1 : 0)
+        selectedIndex = min(max(0, index), lastDisplayIndex)
+        let displayCount = visibleCompletions.count + (hasAcceptedSelection ? 1 : 0)
+        if selectedIndex < suggestionWindowStart {
+            suggestionWindowStart = selectedIndex
+        } else if selectedIndex >= suggestionWindowStart + maximumVisibleSuggestions {
+            suggestionWindowStart = selectedIndex - maximumVisibleSuggestions + 1
+        }
+        suggestionWindowStart = min(suggestionWindowStart, max(0, displayCount - maximumVisibleSuggestions))
         renderPanel()
         if !descriptionAtBottom { positionDetailsPanel() }
     }
@@ -170,12 +212,16 @@ final class CuePanelController {
     }
 
     private func renderPanel() {
-        let description = visibleCompletions.indices.contains(selectedIndex)
-            ? visibleCompletions[selectedIndex].description ?? ""
+        let displayCompletions = hasAcceptedSelection
+            ? [Completion(name: "↵", displayName: nil, description: "Enter the current directory", argumentHint: nil, typedPrefix: "", insertValue: "", replaceValue: nil, icon: nil, type: nil, isDangerous: nil, deprecated: nil, kind: "enter")] + visibleCompletions
+            : visibleCompletions
+        let description = displayCompletions.indices.contains(selectedIndex)
+            ? displayCompletions[selectedIndex].description ?? ""
             : ""
         hostingView.rootView = CuePanelView(
-            completions: visibleCompletions,
+            completions: displayCompletions,
             selectedIndex: selectedIndex,
+            windowStart: suggestionWindowStart,
             description: description,
             descriptionAtBottom: descriptionAtBottom,
             hasAcceptedSelection: hasAcceptedSelection
@@ -183,7 +229,7 @@ final class CuePanelController {
         hostingView.layoutSubtreeIfNeeded()
         let size = hostingView.fittingSize
         panel.setContentSize(NSSize(width: max(descriptionAtBottom ? 400 : 250, size.width), height: size.height))
-        detailsHostingView.rootView = CueDetailView(description: description, hasAcceptedSelection: hasAcceptedSelection)
+        detailsHostingView.rootView = CueDetailView(description: description)
         detailsHostingView.layoutSubtreeIfNeeded()
         detailsPanel.setContentSize(detailsHostingView.fittingSize)
     }
@@ -245,7 +291,7 @@ final class CuePanelController {
 
     private func positionDetailsPanel() {
         let listTop = listOrigin.y + panel.frame.height - 6
-        let selectedRow = selectedIndex - suggestionWindowStart(total: visibleCompletions.count, selected: selectedIndex)
+        let selectedRow = selectedIndex - suggestionWindowStart
         let selectedRowTop = listTop - CGFloat(selectedRow) * suggestionRowHeight
         let visible = activeVisibleFrame ?? (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let detailsY = min(visible.maxY - detailsPanel.frame.height - 8, max(visible.minY + 8, selectedRowTop - detailsPanel.frame.height))
@@ -256,22 +302,34 @@ final class CuePanelController {
         let terminalPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         let app = AXUIElementCreateApplication(terminalPID)
         var windowValue: CFTypeRef?
-        var windowElements: [AXUIElement] = []
+        var windowElement: AXUIElement?
+        var axWindowRect: CGRect?
         if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
            let windowValue {
-            windowElements.append(unsafeBitCast(windowValue, to: AXUIElement.self))
+            let focusedWindow = unsafeBitCast(windowValue, to: AXUIElement.self)
+            if let rect = axRect(focusedWindow).flatMap(validWindowRect) {
+                windowElement = focusedWindow
+                axWindowRect = rect
+            }
         }
-        var windowsValue: CFTypeRef?
-        if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
-           let windows = windowsValue as? [AXUIElement] {
-            windowElements.append(contentsOf: windows)
+        if windowElement == nil {
+            var windowsValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+               let windows = windowsValue as? [AXUIElement] {
+                windowElement = windows.first(where: { element in
+                    guard let rect = axRect(element) else { return false }
+                    return validWindowRect(rect) != nil
+                }) ?? windows.first
+                axWindowRect = windowElement.flatMap(axRect).flatMap(validWindowRect)
+            }
         }
-        let windowElement = windowElements.first(where: { element in
-            guard let rect = axRect(element) else { return false }
-            return rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite
-        }) ?? windowElements.first
-        let axWindowRect = windowElement.flatMap(axRect).flatMap(validWindowRect)
-        let windowRect = axWindowRect ?? windowServerRect(for: terminalPID).flatMap(validWindowRect)
+        let serverWindowRect = windowServerRect(for: terminalPID).flatMap(validWindowRect)
+        // WindowServer and CGDisplayBounds share Quartz's global display
+        // coordinates. Accessibility window bounds can use a different screen
+        // origin on vertically arranged Retina displays, so use AX only as a
+        // fallback for locating the Terminal window.
+        let windowRect = serverWindowRect ?? axWindowRect
+        terminalWindowRect = windowRect
 
         var focusedValue: CFTypeRef?
         var focusedElement: AXUIElement?
@@ -287,7 +345,10 @@ final class CuePanelController {
             }
         }
 
-        let screen = windowRect.flatMap(screenForTerminalWindow) ?? NSScreen.main ?? NSScreen.screens.first
+        let screen = serverWindowRect.flatMap(screenForTerminalWindow)
+            ?? axWindowRect.flatMap(screenForTerminalWindow)
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
         activeVisibleFrame = screen?.visibleFrame
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
@@ -297,13 +358,14 @@ final class CuePanelController {
         var x: CGFloat
         var y: CGFloat
         var caretAnchorY: CGFloat?
-        if let windowRect, metadata.terminalRow > 0, metadata.terminalColumn > 0 {
-            // The shell queries Terminal's live grid position; prefer it over
-            // AX text-range bounds, which can describe the whole text surface.
+        if let windowRect, metadata.terminalRow > 0 {
+            // Derive the live column from zsh's measured prompt width and
+            // cursor index. DSR columns can lag after a completion edit, so
+            // don't use them to place the popup horizontally.
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
-            let terminalColumn = min(columns - 1, max(0, metadata.terminalColumn - 1))
+            let terminalColumn = min(columns - 1, max(0, absoluteColumn % columns))
             let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
             let anchor = appKitPoint(fromQuartz: CGPoint(
                 x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
@@ -311,18 +373,15 @@ final class CuePanelController {
             ), on: screen)
             x = anchor.x
             caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height
+            y = anchor.y - panelSize.height - caretPopupGap
         } else if let focusedElement, let caret = axCaretRect(focusedElement),
-           // Terminal reports the insertion caret at roughly one character
-           // cell wide. The old fixed 8pt limit rejected it at larger font
-           // sizes, forcing the popup to the bottom-row fallback.
            caret.width <= max(18, (textRect?.width ?? windowRect?.width ?? 800) / CGFloat(columns) * 1.5),
            caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
-           windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
+           axWindowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
             let anchor = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
             x = anchor.x
             caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height
+            y = anchor.y - panelSize.height - caretPopupGap
         } else if let windowRect {
             let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
             let cellWidth = textRect.width / CGFloat(columns)
@@ -333,17 +392,14 @@ final class CuePanelController {
             ), on: screen)
             x = anchor.x
             caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height
+            y = anchor.y - panelSize.height - caretPopupGap
         } else {
             let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
             let estimatedColumn = CGFloat(absoluteColumn) * 8.5
-            x = min(visible.maxX - panelSize.width - 12, visible.minX + 18 + estimatedColumn)
+            x = visible.minX + 18 + estimatedColumn
             y = visible.minY + 110
         }
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-        let minX = visible.minX + 8
-        let maxX = max(minX, visible.maxX - panelSize.width - 8)
-        x = min(max(x, minX), maxX)
         let minY = visible.minY + 8
         if y < minY {
             if let caretAnchorY, caretAnchorY + panelSize.height + 8 <= visible.maxY {
@@ -353,6 +409,14 @@ final class CuePanelController {
             }
         }
         return NSPoint(x: x, y: y)
+    }
+
+    private func rectsMatch(_ lhs: CGRect?, _ rhs: CGRect?) -> Bool {
+        guard let lhs, let rhs else { return false }
+        return abs(lhs.origin.x - rhs.origin.x) < 1 &&
+            abs(lhs.origin.y - rhs.origin.y) < 1 &&
+            abs(lhs.width - rhs.width) < 1 &&
+            abs(lhs.height - rhs.height) < 1
     }
 
     private func screenForTerminalWindow(_ rect: CGRect) -> NSScreen? {
@@ -423,12 +487,13 @@ final class CuePanelController {
 struct CuePanelView: View {
     let completions: [Completion]
     let selectedIndex: Int
+    let windowStart: Int
     let description: String
     let descriptionAtBottom: Bool
     let hasAcceptedSelection: Bool
 
     private var visibleSuggestions: [(offset: Int, element: Completion)] {
-        let start = suggestionWindowStart(total: completions.count, selected: selectedIndex)
+        let start = min(max(0, windowStart), max(0, completions.count - maximumVisibleSuggestions))
         return Array(completions.enumerated().dropFirst(start).prefix(maximumVisibleSuggestions))
     }
 
@@ -436,8 +501,18 @@ struct CuePanelView: View {
         VStack(spacing: 0) {
             ForEach(visibleSuggestions, id: \.element.id) { index, completion in
                 HStack(spacing: 3) {
-                    CueIcon(icon: completion.icon, kind: completion.kind, name: completion.name)
-                        .frame(width: 16, height: 16)
+                    ZStack(alignment: .bottomTrailing) {
+                        CueIcon(icon: completion.icon, kind: completion.kind, name: completion.name, suggestionType: completion.type)
+                            .frame(width: 16, height: 16)
+                        if completion.isDangerous == true {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundStyle(Color(red: 1, green: 0.32, blue: 0.24))
+                                .background(Color.black, in: Circle())
+                                .offset(x: 2, y: 2)
+                        }
+                    }
+                    .frame(width: 16, height: 16)
                     suggestionLabel(completion, selected: index == selectedIndex)
                     Spacer(minLength: 0)
                 }
@@ -457,14 +532,9 @@ struct CuePanelView: View {
                         .foregroundStyle(Color.white.opacity(0.72))
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 8) {
-                        if hasAcceptedSelection {
-                            Text("↵ dismiss")
-                        }
-                        Text("(⌘I)")
-                    }
-                    .font(.custom("Menlo-Regular", size: 7.5))
-                    .foregroundStyle(Color.white.opacity(0.46))
+                    Text("(⌘I)")
+                        .font(.custom("Menlo-Regular", size: 7.5))
+                        .foregroundStyle(Color.white.opacity(0.46))
                 }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 3)
@@ -478,9 +548,11 @@ struct CuePanelView: View {
     }
 
     private func suggestionLabel(_ completion: Completion, selected: Bool) -> some View {
-        let prefixLength = min(completion.typedPrefix.count, completion.name.count)
-        let matched = String(completion.name.prefix(prefixLength))
-        let remainder = String(completion.name.dropFirst(prefixLength))
+        let title = completion.displayName ?? completion.name
+        let canHighlightPrefix = title == completion.name && completion.name.lowercased().hasPrefix(completion.typedPrefix.lowercased())
+        let prefixLength = canHighlightPrefix ? min(completion.typedPrefix.count, title.count) : 0
+        let matched = String(title.prefix(prefixLength))
+        let remainder = String(title.dropFirst(prefixLength))
         return HStack(spacing: 0) {
             Text(matched)
                 .fontWeight(.bold)
@@ -493,13 +565,13 @@ struct CuePanelView: View {
         }
             .font(.custom(selected ? "Menlo-Bold" : "Menlo-Regular", size: 11))
             .tracking(0.3)
+            .strikethrough(completion.deprecated == true, color: .white.opacity(0.55))
             .lineLimit(1)
     }
 }
 
 struct CueDetailView: View {
     let description: String
-    let hasAcceptedSelection: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -511,14 +583,9 @@ struct CueDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack {
                 Spacer(minLength: 0)
-                HStack(spacing: 8) {
-                    if hasAcceptedSelection {
-                        Text("↵ dismiss")
-                    }
-                    Text("(⌘I)")
-                }
-                .font(.custom("Menlo-Regular", size: 7.5))
-                .foregroundStyle(Color.white.opacity(0.46))
+                Text("(⌘I)")
+                    .font(.custom("Menlo-Regular", size: 7.5))
+                    .foregroundStyle(Color.white.opacity(0.46))
             }
         }
         .padding(7)
@@ -532,19 +599,79 @@ struct CueIcon: View {
     let icon: String?
     let kind: String
     let name: String
+    let suggestionType: String?
 
     var body: some View {
-        if let icon, !icon.hasPrefix("fig://") {
+        if kind == "enter" {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 14, height: 14)
+                .background(Color(red: 0.92, green: 0.25, blue: 0.22), in: RoundedRectangle(cornerRadius: 4))
+        } else if let icon, let url = URL(string: icon), ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFit().padding(1)
+            } placeholder: {
+                EmptyView()
+            }
+        } else if let icon, icon.hasPrefix("fig://template") {
+            templateIcon(icon)
+        } else if let icon, !icon.hasPrefix("fig://") {
             Text(icon)
                 .font(.system(size: 13))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let image = figImage(icon, kind: kind, name: name) {
-            Image(nsImage: image).resizable().scaledToFit().padding(1)
+        } else if let image = figImage(icon, kind: kind, name: name, suggestionType: suggestionType) {
+            ZStack(alignment: .bottomTrailing) {
+                Image(nsImage: image).resizable().scaledToFit().padding(1)
+                if let badge = iconBadge(icon) {
+                    Text(badge)
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 2)
+                        .frame(minWidth: 9, minHeight: 9)
+                        .background(iconColor(icon, fallback: Color(red: 1, green: 0, blue: 0)), in: RoundedRectangle(cornerRadius: 3))
+                        .offset(x: 2, y: 2)
+                }
+            }
         } else {
             EmptyView()
         }
+    }
+
+    private func templateIcon(_ value: String) -> some View {
+        let badge = iconBadge(value)
+        return ZStack {
+            RoundedRectangle(cornerRadius: 4).fill(iconColor(value, fallback: .white))
+            if let badge {
+                Text(badge)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.black.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
+        .frame(width: 15, height: 15)
+    }
+
+    private func queryValue(_ value: String?, key: String) -> String? {
+        guard let value, let components = URLComponents(string: value) else { return nil }
+        return components.queryItems?.first(where: { $0.name == key })?.value
+    }
+
+    private func iconBadge(_ value: String?) -> String? {
+        queryValue(value, key: "badge")
+    }
+
+    private func iconColor(_ value: String?, fallback: Color) -> Color {
+        guard let raw = queryValue(value, key: "color"), raw.count == 6,
+              let number = UInt64(raw, radix: 16) else { return fallback }
+        return Color(
+            red: Double((number >> 16) & 0xff) / 255,
+            green: Double((number >> 8) & 0xff) / 255,
+            blue: Double(number & 0xff) / 255
+        )
     }
 
     private func iconType(_ value: String?) -> String {
@@ -553,13 +680,29 @@ struct CueIcon: View {
         return type
     }
 
-    private func figImage(_ value: String?, kind: String, name: String) -> NSImage? {
+    private func figImage(_ value: String?, kind: String, name: String, suggestionType: String?) -> NSImage? {
         let explicitType = iconType(value)
+        if let value, value.hasPrefix("fig://"), !value.hasPrefix("fig://icon"), !value.hasPrefix("fig://template") {
+            var filePath = String(value.dropFirst("fig://".count)).components(separatedBy: "?").first ?? ""
+            if filePath.hasPrefix("~/") { filePath = (NSHomeDirectory() as NSString).appendingPathComponent(String(filePath.dropFirst(2))) }
+            if filePath.hasPrefix("/") || filePath.hasPrefix("~") {
+                let image = NSWorkspace.shared.icon(forFile: filePath)
+                image.size = NSSize(width: 16, height: 16)
+                return image
+            }
+        }
         let fallbackType: String
-        switch kind {
-        case "command": fallbackType = "command"
+        switch suggestionType {
+        case "subcommand", "command": fallbackType = "command"
         case "option": fallbackType = "option"
-        default: fallbackType = name.hasSuffix("/") ? "default-folder-icon" : "default-file-icon"
+        case "folder": fallbackType = "default-folder-icon"
+        case "file": fallbackType = "default-file-icon"
+        default:
+            switch kind {
+            case "command": fallbackType = "command"
+            case "option": fallbackType = "option"
+            default: fallbackType = name.hasSuffix("/") ? "default-folder-icon" : "default-file-icon"
+            }
         }
 
         let types = explicitType.isEmpty ? [fallbackType] : [explicitType, fallbackType]
@@ -588,6 +731,7 @@ final class CueService {
     private var latestRequest: (id: Int, metadata: RequestMetadata)?
     private var pendingMetadata: [Int: RequestMetadata] = [:]
     private let socketPath = "/tmp/cue-\(getuid()).sock"
+    private let completionCachePath = "/tmp/cue-\(getuid()).sock.cache"
     private var visibilityTimer: Timer?
     private var activationObserver: NSObjectProtocol?
     private var previousTerminalWindow: (id: CGWindowID, frame: CGRect)?
@@ -598,9 +742,45 @@ final class CueService {
     }
 
     func start() {
+        unlink(completionCachePath)
         startWorker()
         startSocket()
         startVisibilityMonitor()
+    }
+
+    private func cacheCompletions(_ completions: [Completion], for metadata: RequestMetadata) {
+        var data = Data()
+        func appendField(_ value: String) {
+            data.append(contentsOf: value.utf8)
+            data.append(0)
+        }
+        appendField(metadata.line)
+        appendField(metadata.cwd)
+        for completion in completions {
+            appendField(completion.insertValue)
+            appendField(completion.replaceValue ?? "")
+            appendField(completion.description ?? "")
+        }
+
+        let temporaryPath = "\(completionCachePath).\(getpid()).tmp"
+        unlink(temporaryPath)
+        let descriptor = open(temporaryPath, O_WRONLY | O_CREAT | O_EXCL, mode_t(0o600))
+        guard descriptor >= 0 else { return }
+        let wroteAllData = data.withUnsafeBytes { bytes -> Bool in
+            guard let baseAddress = bytes.baseAddress else { return data.isEmpty }
+            var offset = 0
+            while offset < bytes.count {
+                let written = Darwin.write(descriptor, baseAddress.advanced(by: offset), bytes.count - offset)
+                guard written > 0 else { return false }
+                offset += written
+            }
+            return true
+        }
+        close(descriptor)
+        guard wroteAllData, rename(temporaryPath, completionCachePath) == 0 else {
+            unlink(temporaryPath)
+            return
+        }
     }
 
     private func startVisibilityMonitor() {
@@ -706,33 +886,52 @@ final class CueService {
                 }
             }
         }
+        let previousUmask = umask(mode_t(0o177))
         let bound = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 bind(server, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
+        _ = umask(previousUmask)
         guard bound == 0, listen(server, 16) == 0 else { close(server); return }
-        chmod(socketPath, mode_t(0o600))
+        guard chmod(socketPath, mode_t(0o600)) == 0 else {
+            close(server)
+            unlink(socketPath)
+            return
+        }
         DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             while let self {
                 let client = accept(server, nil, nil)
                 if client < 0 { continue }
-                let packet = Self.readAll(from: client)
-                close(client)
-                if let packet, let metadata = Self.parse(packet) { self.submit(metadata) }
+                DispatchQueue.global(qos: .userInteractive).async { [weak self] in
+                    guard let self else { close(client); return }
+                    self.serve(client)
+                }
             }
         }
     }
 
-    private static func readAll(from fd: Int32) -> Data? {
-        var data = Data()
+    private func serve(_ client: Int32) {
+        var buffered = Data()
+        while let packet = Self.readPacket(from: client, buffered: &buffered) {
+            if let metadata = Self.parse(packet) { submit(metadata) }
+        }
+        close(client)
+    }
+
+    private static func readPacket(from fd: Int32, buffered: inout Data) -> Data? {
         var buffer = [UInt8](repeating: 0, count: 8192)
         while true {
+            if let delimiter = buffered.range(of: Data([0, 0])) {
+                let packet = Data(buffered[..<delimiter.lowerBound])
+                buffered.removeSubrange(..<delimiter.upperBound)
+                return packet
+            }
+            guard buffered.count < 1_048_576 else { return nil }
             let count = recv(fd, &buffer, buffer.count, 0)
-            if count <= 0 { break }
-            data.append(contentsOf: buffer[0..<count])
+            guard count > 0 else { return nil }
+            buffered.append(contentsOf: buffer[0..<count])
         }
-        return data.isEmpty ? nil : data
     }
 
     private static func parse(_ data: Data) -> RequestMetadata? {
@@ -740,7 +939,7 @@ final class CueService {
         guard let separator = bytes.firstIndex(of: 0),
               let header = String(bytes: bytes[..<separator], encoding: .utf8),
               let line = String(bytes: bytes[(separator + 1)...], encoding: .utf8) else { return nil }
-        let fields = header.split(separator: "\t", maxSplits: 7, omittingEmptySubsequences: false)
+        let fields = header.split(separator: "\t", maxSplits: 8, omittingEmptySubsequences: false)
         guard fields.count >= 5,
               let cursor = Int(fields[0]), let columns = Int(fields[1]),
               let lines = Int(fields[2]), let promptWidth = Int(fields[3]) else { return nil }
@@ -750,7 +949,16 @@ final class CueService {
         let cwdIndex = hasCursorPosition ? 6 : 4
         let actionIndex = hasCursorPosition ? 7 : 5
         let action = fields.indices.contains(actionIndex) ? String(fields[actionIndex]) : ""
-        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[cwdIndex]), line: line, action: action)
+        let environmentIndex = hasCursorPosition ? 8 : 6
+        let encodedEnvironment = fields.indices.contains(environmentIndex) ? String(fields[environmentIndex]) : ""
+        let environmentData = Data(base64Encoded: encodedEnvironment) ?? Data()
+        let environmentText = String(data: environmentData, encoding: .utf8) ?? ""
+        var environmentVariables: [String: String] = [:]
+        for entry in environmentText.split(separator: "\0", omittingEmptySubsequences: true) {
+            guard let separator = entry.firstIndex(of: "=") else { continue }
+            environmentVariables[String(entry[..<separator])] = String(entry[entry.index(after: separator)...])
+        }
+        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[cwdIndex]), line: line, action: action, environmentVariables: environmentVariables)
     }
 
     private func submit(_ metadata: RequestMetadata) {
@@ -798,7 +1006,7 @@ final class CueService {
             latestRequest = nil
             return
         }
-        let body: [String: Any] = ["id": request.id, "line": request.metadata.line, "cwd": request.metadata.cwd]
+        let body: [String: Any] = ["id": request.id, "line": request.metadata.line, "cwd": request.metadata.cwd, "environmentVariables": request.metadata.environmentVariables]
         guard let data = try? JSONSerialization.data(withJSONObject: body),
               var text = String(data: data, encoding: .utf8) else { return }
         text.append("\n")
@@ -826,6 +1034,7 @@ final class CueService {
                 let isLatest = response.id == self.latestID
                 self.latestIDLock.unlock()
                 if isLatest, let metadata {
+                    self.cacheCompletions(response.completions, for: metadata)
                     DispatchQueue.main.async {
                         self.model.completions = response.completions
                         self.model.selectedIndex = 0

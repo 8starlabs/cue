@@ -5,7 +5,7 @@ Cue is a terminal autocomplete prototype from 8StarLabs. The repo is organized a
 ```text
 apps/docs       Next.js + Fumadocs docs site
 packages/cue    TypeScript completion engine + macOS popup + zsh integration
-Formula         Homebrew release assets
+Formula         Homebrew tap formula (same repository)
 ```
 
 ## Working on the package
@@ -22,4 +22,4 @@ The docs site uses Next.js App Router, Fumadocs MDX/UI, Tailwind CSS v4, and sha
 
 ## Release truth
 
-Homebrew distribution is a target, not a currently published service. A formula must point to a real GitHub release archive and include its matching SHA-256 before it is described as ready to install.
+Homebrew distribution uses this repository as its tap; no second tap repo is needed. A formula must point to a real GitHub release archive and include its matching SHA-256 before it is described as ready to install. Because the repository is not named `homebrew-cue`, users add it with the explicit Git URL shown in the Homebrew guide.

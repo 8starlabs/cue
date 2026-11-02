@@ -6,7 +6,7 @@ Cue is an 8StarLabs project for IDE-style autocomplete in Apple Terminal. This r
 
 - `packages/cue/` is the macOS autocomplete package: TypeScript completion engine, SwiftUI/AppKit popup, zsh integration, app builder, and its package manifest.
 - `apps/docs/` is the Next.js documentation site. Fumadocs MDX owns the guide content; shadcn/ui components and Tailwind CSS provide the site’s UI and styling.
-- `Formula/` contains Homebrew distribution assets. Do not claim that a public formula is installable until a matching tagged GitHub release archive and SHA-256 are published.
+- `Formula/` contains this repository's Homebrew tap formula. Keep it in this repo; do not create a separate tap repository. Do not claim installation is available until a matching tagged GitHub release archive and SHA-256 are published.
 
 ## Commands
 

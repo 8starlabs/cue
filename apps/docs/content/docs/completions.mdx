@@ -3,20 +3,20 @@ title: How suggestions work
 description: Where Cue gets command, option, file, and folder suggestions.
 ---
 
-Cue combines open command specs with filesystem-aware path completion.
+Cue combines the bundled Fig command catalog with filesystem-aware path completion. Suggestions update as you type, without a Tab press to open the popup.
 
 ## Command specs
 
-The completion engine loads the published [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs. These describe common commands, subcommands, flags, argument hints, icons, and descriptions. For example, `git ch` can show Git subcommands; `code -` can show Visual Studio Code CLI flags.
+The completion engine loads the published [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs. They provide command and subcommand names, aliases, options, argument hints, descriptions, icons, and dynamic generators. For example, `git ch` can show Git subcommands, `git checkout ma` can suggest branches, and `code -` can show Visual Studio Code CLI flags.
 
-Cue uses the installed spec package at build time. A spec can list an option that is unfamiliar or not useful in a particular workflow. For `code`, Cue keeps normal file and folder suggestions visible by default and shows the CLI options when the partial argument starts with `-`.
+Cue bundles the installed spec package with the app, so command suggestions work offline. A spec can list an option that is unfamiliar or not useful in a particular workflow. For `code`, Cue shows files and folders for normal path input and shows CLI options when the partial argument starts with `-`.
 
 ## Paths
 
-The `cd` completion is generated directly from the current working directory. It returns folders only, hides dot-folders until you type a dot, and uses the typed path prefix to list folders deeper in the tree. When you add a space after a completed `cd` path, Cue closes the popup because `cd` takes one path argument.
+The `cd` completion is generated directly from the current working directory. It returns folders only, hides dot-folders until you type a dot, and uses the typed path prefix to list folders deeper in the tree. It also offers `../` to move to the parent folder. After a completed `cd` path, typing a space closes the popup because `cd` takes one path argument.
 
-For `code`, Cue lists files and folders that match the current path. Folders are marked with a trailing slash so you can continue into them.
+For `code` and other commands whose specs accept paths, Cue lists matching files and folders. Folders are marked with a trailing slash so you can continue into them. File completion also works after shell redirections such as `>`, and the current command is parsed after common pipes and command separators.
 
 ## Current limits
 
-Cue is a focused prototype rather than a full shell parser. It currently handles one simple command line at a time and does not implement every Fig generator, shell expansion, pipeline, subshell, or quoting behavior. Suggestions may differ from a shell’s own programmable completion for commands that rely on complex runtime state.
+Cue understands common pipes, command separators, redirections, and quoted tokens. It is not a complete zsh parser: shell expansion, substitutions, subshells, and some complex quoting can still produce different suggestions. See [Fig spec support](/docs/fig-spec-support) for the supported spec fields and known gaps.

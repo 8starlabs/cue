@@ -37,4 +37,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 codesign --force --deep --sign - "$APP"
+
+# When building interactively from Apple Terminal, replace the running app so
+# the next completion uses this build. Keep non-interactive/package builds free
+# of GUI side effects.
+if [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" ]]; then
+  /usr/bin/pkill -TERM -x Cue 2>/dev/null || true
+  for _ in {1..20}; do
+    /usr/bin/pgrep -x Cue >/dev/null || break
+    sleep 0.1
+  done
+  /usr/bin/open -ga "$APP"
+fi
+
 echo "Built $APP"

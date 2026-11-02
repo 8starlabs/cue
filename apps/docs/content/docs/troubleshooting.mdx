@@ -11,7 +11,7 @@ description: Fix the usual setup and popup issues.
 4. Check that `packages/cue/dist/cli.js` exists and that Node.js is available in your shell.
 5. Check **System Settings → Privacy & Security → Accessibility** and allow Cue if macOS requested access.
 
-Try `git ch` or `cd ` at a fresh prompt. If the app was rebuilt, quit the Cue menu-bar/background app and open `packages/cue/build/Cue.app` again.
+Try `git ch` or `cd ` at a fresh prompt; suggestions appear as you type. Sourcing the integration launches the built app. If Cue was rebuilt from outside Apple Terminal, restart Cue so it loads the new app bundle.
 
 ## The popup stays after a suggestion disappears
 
@@ -19,7 +19,7 @@ Cue hides the popup when the latest completion result is empty. If the old panel
 
 ## The popup is in the wrong place
 
-Cue uses Terminal’s cursor report when available and accessibility geometry as a fallback. Verify Cue remains enabled under Accessibility. Display scaling, multiple monitors, and Terminal’s window position can affect the geometry Cue receives; include a screenshot and your monitor arrangement when reporting a positioning issue.
+Cue anchors the popup to Terminal’s live caret and converts coordinates for the monitor containing the Terminal window. It uses Accessibility geometry as a fallback. Verify Cue remains enabled under Accessibility. If the position is still wrong, include a screenshot, macOS display scaling, and your monitor arrangement when reporting it.
 
 ## Tab prints text into the terminal
 
@@ -33,4 +33,4 @@ Cue binds Tab to the native suggestion selection flow. Another plugin loaded aft
 
 ## The suggestion doesn’t match the installed command
 
-Cue reads Fig’s bundled command spec, which can be broader than the exact executable version installed on your Mac. For Visual Studio Code CLI flags, type `code -` to see options. For normal paths, type `code `.
+Cue reads its bundled Fig command spec, which can be broader than the exact executable version installed on your Mac. For Visual Studio Code CLI flags, type `code -` to see options. For normal paths, type `code `; for commands that accept paths, type a partial path or `rm ` to see matching files and folders.

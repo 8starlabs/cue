@@ -13,9 +13,15 @@ fi
 typeset -g KEYTIMEOUT=1
 
 typeset -gi CUE_SELECTED_INDEX=0
+typeset -g CUE_SELECTED_VALUE=''
+typeset -g CUE_SELECTED_REPLACEMENT=''
+typeset -g CUE_SELECTION_BUFFER=''
+typeset -g CUE_SELECTION_CURSOR=''
 typeset -ga CUE_MATCHES
+typeset -ga CUE_REPLACEMENTS
 typeset -g CUE_MATCHES_BUFFER=''
 typeset -g CUE_MATCHES_CWD=''
+typeset -g CUE_MATCHES_CURSOR=''
 typeset -gi CUE_MATCHES_CACHE_VALID=0
 typeset -gi CUE_CURSOR_ROW=0
 typeset -gi CUE_CURSOR_COLUMN=0
@@ -23,6 +29,13 @@ typeset -gi CUE_SUPPRESS_UNTIL_SPACE=0
 typeset -g CUE_DISMISSED_BUFFER=''
 typeset -g CUE_ACCEPTED_BUFFER=''
 typeset -g CUE_ENTER_DISMISS_BUFFER=''
+if (( ${+CUE_SOCKET_FD} && CUE_SOCKET_FD >= 0 )); then
+  exec {CUE_SOCKET_FD}>&- 2>/dev/null
+fi
+typeset -gi CUE_SOCKET_FD=-1
+typeset -g CUE_SOCKET_INODE=''
+zmodload zsh/net/socket 2>/dev/null || true
+zmodload zsh/stat 2>/dev/null || true
 
 _cue_query_terminal_cursor() {
   local cursor_delta="${1:-0}"
@@ -64,33 +77,108 @@ _cue_query_terminal_cursor() {
 }
 
 _cue_matches() {
-  if (( CUE_MATCHES_CACHE_VALID )) && [[ "$BUFFER" == "$CUE_MATCHES_BUFFER" && "$PWD" == "$CUE_MATCHES_CWD" ]]; then
+  if (( CUE_MATCHES_CACHE_VALID )) && [[ "$BUFFER" == "$CUE_MATCHES_BUFFER" && "$CURSOR" == "$CUE_MATCHES_CURSOR" && "$PWD" == "$CUE_MATCHES_CWD" ]]; then
     (( ${#CUE_MATCHES} > 0 ))
     return
   fi
 
   local engine="${CUE_HOME}/dist/cli.js"
-  local name description
+  local name replacement description cached_line cached_cwd cache_matched=0
+  local -a cached_matches=() cached_replacements=()
   CUE_MATCHES=()
-  [[ -f "$engine" ]] || return 1
-  while IFS= read -r -d '' name && IFS= read -r -d '' description; do
-    CUE_MATCHES+=("$name")
-  done < <(CUE_CWD="$PWD" node "$engine" --zsh "$BUFFER" 2>/dev/null)
+  CUE_REPLACEMENTS=()
+  if [[ -r "$CUE_SOCKET.cache" ]]; then
+    {
+      if IFS= read -r -d '' cached_line && IFS= read -r -d '' cached_cwd && [[ "$cached_line" == "$LBUFFER" && "$cached_cwd" == "$PWD" ]]; then
+        cache_matched=1
+        while IFS= read -r -d '' name && IFS= read -r -d '' replacement && IFS= read -r -d '' description; do
+          cached_matches+=("$name")
+          cached_replacements+=("$replacement")
+        done
+      fi
+    } < "$CUE_SOCKET.cache"
+  fi
+  if (( cache_matched )); then
+    CUE_MATCHES=("${cached_matches[@]}")
+    CUE_REPLACEMENTS=("${cached_replacements[@]}")
+  else
+    [[ -f "$engine" ]] || return 1
+    while IFS= read -r -d '' name && IFS= read -r -d '' replacement && IFS= read -r -d '' description; do
+      CUE_MATCHES+=("$name")
+      CUE_REPLACEMENTS+=("$replacement")
+    done < <(CUE_CWD="$PWD" node "$engine" --zsh "$LBUFFER" 2>/dev/null)
+  fi
+  if [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]]; then
+    CUE_MATCHES=("__cue_enter_current_directory__" "${CUE_MATCHES[@]}")
+  fi
   CUE_MATCHES_BUFFER="$BUFFER"
   CUE_MATCHES_CWD="$PWD"
+  CUE_MATCHES_CURSOR="$CURSOR"
   CUE_MATCHES_CACHE_VALID=1
   (( ${#CUE_MATCHES} > 0 ))
 }
 
+_cue_materialize_text() {
+  local output="$1" text="$2" character
+  for character in ${(s::)text}; do
+    if [[ "$character" == $'\b' ]]; then
+      (( ${#output} > 0 )) && output="${output[1,-2]}"
+    else
+      output+="$character"
+    fi
+  done
+  REPLY="$output"
+}
+
 _cue_send_selection() {
-  [[ -S "$CUE_SOCKET" ]] || return
-  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\tselect:%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$CUE_SELECTED_INDEX" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  _cue_send_packet "select:$CUE_SELECTED_INDEX" "$BUFFER"
 }
 
 _cue_send_hide() {
-  if [[ -S "$CUE_SOCKET" ]]; then
-    { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\thide\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$BUFFER" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  _cue_send_packet hide "$BUFFER"
+}
+
+_cue_connect_socket() {
+  local -A socket_stat
+  if (( CUE_SOCKET_FD >= 0 )); then
+    if [[ -S "$CUE_SOCKET" ]] && zstat -H socket_stat "$CUE_SOCKET" 2>/dev/null && [[ "${socket_stat[inode]}" == "$CUE_SOCKET_INODE" ]]; then
+      return 0
+    fi
+    _cue_close_socket
   fi
+  [[ -S "$CUE_SOCKET" ]] || return 1
+  zstat -H socket_stat "$CUE_SOCKET" 2>/dev/null || return 1
+  zsocket "$CUE_SOCKET" 2>/dev/null || return 1
+  CUE_SOCKET_FD=$REPLY
+  CUE_SOCKET_INODE="${socket_stat[inode]}"
+}
+
+_cue_close_socket() {
+  if (( CUE_SOCKET_FD >= 0 )); then
+    exec {CUE_SOCKET_FD}>&- 2>/dev/null
+    CUE_SOCKET_FD=-1
+    CUE_SOCKET_INODE=''
+  fi
+}
+
+_cue_write_packet() {
+  local action="$1" line="$2" include_environment="${3:-0}"
+  if (( include_environment )); then
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s\0\0' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$CUE_ENV_B64" "$line" >&$CUE_SOCKET_FD 2>/dev/null
+  else
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s\0\0' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$line" >&$CUE_SOCKET_FD 2>/dev/null
+  fi
+}
+
+_cue_send_packet() {
+  local action="$1" line="$2" include_environment="${3:-0}"
+  _cue_connect_socket || return 1
+  if _cue_write_packet "$action" "$line" "$include_environment"; then
+    return 0
+  fi
+  _cue_close_socket
+  _cue_connect_socket || return 1
+  _cue_write_packet "$action" "$line" "$include_environment"
 }
 
 _cue_dismiss_widget() {
@@ -104,12 +192,17 @@ bindkey '^[' cue_dismiss_widget
 
 _cue_move_selection() {
   local direction="$1"
-  if [[ "$BUFFER" == *[[:space:]]* ]] && _cue_matches; then
+  if _cue_matches; then
     if [[ "$direction" == down ]]; then
       CUE_SELECTED_INDEX=$(( (CUE_SELECTED_INDEX + 1) % ${#CUE_MATCHES} ))
     else
       CUE_SELECTED_INDEX=$(( (CUE_SELECTED_INDEX + ${#CUE_MATCHES} - 1) % ${#CUE_MATCHES} ))
     fi
+    local selected_index=$(( CUE_SELECTED_INDEX + 1 ))
+    CUE_SELECTED_VALUE="${CUE_MATCHES[$selected_index]}"
+    CUE_SELECTED_REPLACEMENT="${CUE_REPLACEMENTS[$selected_index]}"
+    CUE_SELECTION_BUFFER="$BUFFER"
+    CUE_SELECTION_CURSOR="$CURSOR"
     _cue_send_selection
     return
   fi
@@ -132,20 +225,59 @@ bindkey '^[OA' cue_up_widget
 # Insert the highlighted Cue suggestion without invoking zsh's printed
 # completion list. Return nonzero when there is no suggestion to insert.
 _cue_complete_selection() {
-  (( CURSOR == ${#BUFFER} )) || return 1
   [[ "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] || return 1
-  [[ "$BUFFER" == *[[:space:]]* ]] || return 1
-  _cue_matches || return 1
-  local selected
-  (( CUE_SELECTED_INDEX >= ${#CUE_MATCHES} )) && CUE_SELECTED_INDEX=0
-  selected="${CUE_MATCHES[$(( CUE_SELECTED_INDEX + 1 ))]}"
+  local selected replacement
+  if [[ "$BUFFER" == "$CUE_SELECTION_BUFFER" && "$CURSOR" == "$CUE_SELECTION_CURSOR" && -n "$CUE_SELECTED_VALUE" ]]; then
+    selected="$CUE_SELECTED_VALUE"
+    replacement="$CUE_SELECTED_REPLACEMENT"
+  else
+    _cue_matches || return 1
+    (( CUE_SELECTED_INDEX >= ${#CUE_MATCHES} )) && CUE_SELECTED_INDEX=0
+    local selected_index=$(( CUE_SELECTED_INDEX + 1 ))
+    selected="${CUE_MATCHES[$selected_index]}"
+    replacement="${CUE_REPLACEMENTS[$selected_index]}"
+  fi
   [[ -n "$selected" ]] || return 1
+  [[ "$selected" == "__cue_enter_current_directory__" ]] && return 1
 
-  local current="${LBUFFER##*[[:space:]]}"
-  local prefix="${LBUFFER[1,$(( ${#LBUFFER} - ${#current} ))]}"
-  local trailing="${RBUFFER}"
-  BUFFER="${prefix}${selected}${trailing}"
-  CURSOR=$((${#prefix} + ${#selected}))
+  local insertion before_marker after_marker before_cursor cursor_position
+  if [[ -n "$replacement" ]]; then
+    insertion="$replacement"
+    if [[ "$insertion" == *"{cursor}"* ]]; then
+      before_marker="${insertion%%\{cursor\}*}"
+      after_marker="${insertion#*\{cursor\}}"
+      _cue_materialize_text '' "$before_marker"
+      before_cursor="$REPLY"
+      cursor_position=${#before_cursor}
+      _cue_materialize_text "$before_cursor" "$after_marker"
+      BUFFER="$REPLY"
+      CURSOR=$(( cursor_position < ${#BUFFER} ? cursor_position : ${#BUFFER} ))
+    else
+      _cue_materialize_text '' "$insertion"
+      BUFFER="$REPLY"
+      CURSOR=${#BUFFER}
+    fi
+  else
+    local current="${LBUFFER##*[[:space:]]}"
+    local prefix="${LBUFFER[1,$(( ${#LBUFFER} - ${#current} ))]}"
+    local suffixToken="${RBUFFER%%[[:space:]]*}"
+    local trailing="${RBUFFER:${#suffixToken}}"
+    insertion="$selected"
+    if [[ "$insertion" == *"{cursor}"* ]]; then
+      before_marker="${insertion%%\{cursor\}*}"
+      after_marker="${insertion#*\{cursor\}}"
+      _cue_materialize_text "$prefix" "$before_marker"
+      before_cursor="$REPLY"
+      cursor_position=${#before_cursor}
+      _cue_materialize_text "$before_cursor" "$after_marker"
+      BUFFER="${REPLY}${trailing}"
+      CURSOR=$(( cursor_position < ${#REPLY} ? cursor_position : ${#REPLY} ))
+    else
+      _cue_materialize_text "$prefix" "$insertion"
+      BUFFER="${REPLY}${trailing}"
+      CURSOR=${#REPLY}
+    fi
+  fi
   CUE_SELECTED_INDEX=0
   if [[ "$BUFFER" == cd[[:space:]]* ]]; then
     # Keep the next path level visible after a folder is accepted. Enter can
@@ -179,7 +311,7 @@ _cue_accept_widget() {
     zle .accept-line
     return
   fi
-  if [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && _cue_matches; then
+  if [[ -n "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" && "$BUFFER" != "$CUE_DISMISSED_BUFFER" ]] && (( CUE_SELECTED_INDEX == 0 )) && _cue_matches; then
     _cue_dismiss_widget
     return
   fi
@@ -201,6 +333,7 @@ bindkey -M viins '^J' cue_accept_widget
 typeset -g CUE_LIVE_LAST_BUFFER=''
 typeset -g CUE_LIVE_LAST_CURSOR=''
 typeset -gi CUE_PROMPT_WIDTH=0
+typeset -g CUE_ENV_B64=''
 typeset -g CUE_SOCKET="/tmp/cue-${UID}.sock"
 
 _cue_live_watch() {
@@ -211,6 +344,10 @@ _cue_live_watch() {
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
     CUE_SELECTED_INDEX=0
+    CUE_SELECTED_VALUE=''
+    CUE_SELECTED_REPLACEMENT=''
+    CUE_SELECTION_BUFFER=''
+    CUE_SELECTION_CURSOR=''
     CUE_DISMISSED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]] || CUE_ACCEPTED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]] || CUE_ENTER_DISMISS_BUFFER=''
@@ -221,7 +358,7 @@ _cue_live_watch() {
   CUE_LIVE_LAST_CURSOR="$CURSOR"
 
   [[ -S "$CUE_SOCKET" ]] || return
-  local line="$BUFFER"
+  local line="$LBUFFER"
   if (( CUE_SUPPRESS_UNTIL_SPACE )); then
     if (( CURSOR == ${#BUFFER} )) && [[ "$BUFFER" == *[[:space:]] ]]; then
       CUE_SUPPRESS_UNTIL_SPACE=0
@@ -229,9 +366,7 @@ _cue_live_watch() {
       line=''
     fi
   fi
-  if (( CURSOR != ${#BUFFER} )); then
-    line=''
-  elif [[ -n "$line" ]]; then
+  if [[ -n "$line" ]]; then
     local cursor_delta=$(( CURSOR - old_cursor ))
     local use_cached_position=0
     if (( CUE_CURSOR_ROW > 0 && CUE_CURSOR_COLUMN > 0 )); then
@@ -248,13 +383,14 @@ _cue_live_watch() {
     CUE_CURSOR_ROW=0
     CUE_CURSOR_COLUMN=0
   fi
-  { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$line" | /usr/bin/nc -U "$CUE_SOCKET" >/dev/null 2>&1 } &!
+  _cue_send_packet "$action" "$line" 1
 }
 
 _cue_measure_prompt() {
   local rendered
   rendered="$(print -P -- "$PROMPT" | sed $'s/\033\\[[0-9;]*[[:alpha:]]//g')"
   CUE_PROMPT_WIDTH=${#rendered}
+  CUE_ENV_B64="$(/usr/bin/env -0 | /usr/bin/base64 | tr -d '\n')"
   CUE_CURSOR_ROW=0
   CUE_CURSOR_COLUMN=0
 }

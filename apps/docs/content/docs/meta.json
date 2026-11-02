@@ -1,4 +1,12 @@
 {
   "title": "Cue guides",
-  "pages": ["index", "getting-started", "keyboard-controls", "completions", "troubleshooting"]
+  "pages": [
+    "index",
+    "getting-started",
+    "homebrew",
+    "keyboard-controls",
+    "completions",
+    "fig-spec-support",
+    "troubleshooting"
+  ]
 }

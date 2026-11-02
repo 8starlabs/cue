@@ -3,12 +3,29 @@ title: Cue guides
 description: Get Cue running and learn how suggestions behave in Apple Terminal.
 ---
 
-Cue puts command suggestions beside your cursor in Apple Terminal. Start with the installation guide, then learn the keyboard controls and how command specs power the suggestions.
+Cue shows command and path suggestions as you type in Apple Terminal. The popup follows the caret, shows descriptions for the selected row, and stays out of the way when Terminal loses focus. Start with setup, then learn the keyboard controls and how command specs power suggestions.
 
 <Cards>
-  <Card title="Get started" href="/docs/getting-started" description="Build Cue and load the zsh integration." />
-  <Card title="Keyboard controls" href="/docs/keyboard-controls" description="Move, accept, dismiss, and run suggestions." />
-  <Card title="How suggestions work" href="/docs/completions" description="Learn where command and path suggestions come from." />
+  <Card
+    title="Get started"
+    href="/docs/getting-started"
+    description="Build Cue and load the zsh integration."
+  />
+  <Card
+    title="Homebrew"
+    href="/docs/homebrew"
+    description="Install, update, or remove Cue with Homebrew."
+  />
+  <Card
+    title="Keyboard controls"
+    href="/docs/keyboard-controls"
+    description="Navigate suggestions, switch the description layout, and accept commands."
+  />
+  <Card
+    title="How suggestions work"
+    href="/docs/completions"
+    description="Learn where command and path suggestions come from."
+  />
 </Cards>
 
-Cue is an early 8StarLabs project. It currently targets macOS, Apple Terminal, and zsh. Homebrew distribution is planned, but a public release is not available yet.
+Cue currently targets macOS, Apple Terminal, and zsh. Its command definitions come from Fig's open-source autocomplete catalog; Cue supplies the shell integration and native popup. The Homebrew formula lives in this repository, but the first release archive is not available yet.

@@ -15,6 +15,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/shell-quote": "^1.7.5",
+    "@withfig/autocomplete-types": "1.31.0",
     "typescript": "^5.7.2"
   }
 }

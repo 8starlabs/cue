@@ -16,4 +16,4 @@ To load the shell integration for the current zsh session:
 source "$PWD/packages/cue/zsh/cue.zsh"
 ```
 
-The Homebrew release archive is assembled with `pnpm release:cue`. That archive and the matching formula are intended for a 8StarLabs Homebrew tap once a public GitHub release is published.
+The Homebrew release archive is assembled with `pnpm release:cue`. The matching formula lives at the repository root in `Formula/cue.rb`; publish it and the archive together in this repository's GitHub release flow.

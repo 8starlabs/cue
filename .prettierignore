@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/build
+**/.source
+**/.turbo
+packages/cue/native/.build
+pnpm-lock.yaml
+*.swift
+*.sh
+*.zsh

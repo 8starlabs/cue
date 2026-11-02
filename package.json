@@ -13,6 +13,31 @@
     "check:docs": "pnpm --filter cue-docs check",
     "build:cue": "pnpm --filter cue build",
     "build:app": "pnpm --filter cue build:app",
-    "release:cue": "bash scripts/package-cue-release.sh"
+    "version:check": "node scripts/check-release-version.mjs",
+    "release:cue": "bash scripts/package-cue-release.sh",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,jsonc,md,mdx,css,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

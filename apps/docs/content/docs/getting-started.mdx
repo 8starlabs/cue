@@ -12,16 +12,18 @@ description: Build Cue and enable its zsh integration in Apple Terminal.
 - pnpm 10 or later
 - Xcode Command Line Tools, to build the Swift app
 
-## Build Cue
+## Install from source
 
-From the repository root:
+Clone the repository, then run these commands from its root:
 
 ```sh
+git clone https://github.com/8starlabs/cue.git
+cd cue
 pnpm install
 pnpm build:app
 ```
 
-This compiles the completion engine, builds the native Cue app, and places it at `packages/cue/build/Cue.app`.
+This builds the completion engine and native app at `packages/cue/build/Cue.app`.
 
 ## Load the shell integration
 
@@ -37,7 +39,7 @@ Keep the terminal working directory at the repository root when running this com
 source "/path/to/cue/packages/cue/zsh/cue.zsh"
 ```
 
-Replace `/path/to/cue` with the absolute path to your clone. Restart Terminal or source `~/.zshrc` to apply it.
+Replace `/path/to/cue` with the absolute path to your clone. Restart Terminal or run `source ~/.zshrc` to apply it. Sourcing the integration also launches Cue in the background.
 
 ## Grant Accessibility access
 
@@ -45,8 +47,35 @@ macOS may ask to let Cue control your computer. Allow Cue under **System Setting
 
 ## Try a few commands
 
-Type `git ch`, `cd` followed by a space, or `code` followed by a space in the prompt and wait for the suggestion panel. `git ch` shows matching Git subcommands. `cd ` shows folders in the current directory. `code ` shows files and folders that can be opened in Visual Studio Code. Continue typing to narrow the list.
+Type `git ch`, `cd `, `code `, or `rm ` and wait for the suggestion panel; you do not need to press Tab to make it appear. `git ch` shows matching Git subcommands. `cd ` shows folders in the current directory, and accepting a folder shows its next level. `code ` and file-taking commands such as `rm ` can show matching files and folders. Continue typing to narrow the list.
+
+## Update
+
+Pull the latest code and rebuild from the repository root:
+
+```sh
+git pull --ff-only
+pnpm install
+pnpm build:app
+```
+
+When you build from Apple Terminal, the build replaces the running Cue app automatically. Open a new Terminal window after updating so zsh loads the latest integration; existing windows do not reload `~/.zshrc` automatically. If you build from another app, stop Cue first, then open a new Terminal window:
+
+```sh
+pkill -x Cue 2>/dev/null || true
+```
+
+## Remove
+
+First remove the Cue `source` line from `~/.zshrc`, then stop the background app and clear its temporary socket files:
+
+```sh
+pkill -x Cue 2>/dev/null || true
+rm -f "/tmp/cue-$(id -u).sock" "/tmp/cue-$(id -u).sock.cache"
+```
+
+Close existing Terminal windows to unload the shell integration. Then delete the repository folder from Finder or remove your clone's folder from another directory. You can also remove Cue from **System Settings → Privacy & Security → Accessibility**. Keep Node.js and Xcode Command Line Tools if other projects use them.
 
 ## Homebrew
 
-Cue is being organized for Homebrew distribution, but no public tap or release archive is published yet. Until a tagged release is available, build it from this repository using the steps above.
+The Homebrew formula will be maintained in this repository at `Formula/cue.rb`; no second tap repo is needed. The first release archive is not published yet. See the [Homebrew guide](/docs/homebrew) for the tap, install, upgrade, and removal steps.

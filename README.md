@@ -1,20 +1,63 @@
 # Cue
 
+![Cue showing live Git command suggestions in Apple Terminal](assets/social/cue-readme.png)
+
 Autocomplete for the terminal you already use.
 
 Cue brings Fig-style command and path suggestions to Apple Terminal, with helpful descriptions beside the selected suggestion.
 
-I started using Fig before Amazon acquired it and loved its autocomplete. After the CLI became Kiro and announced that v3 would retire inline autocomplete, I was sad to lose it. Cue is my attempt to bring that experience back.
+**Platform:** Cue currently supports Apple Silicon Macs running macOS 13 or later, with Apple Terminal and zsh. It does not currently support Windows, Linux, or other terminal apps.
+
+## Features
+
+| Feature               | What it does                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Live suggestions      | Shows matching completions as you type, without pressing Tab to open the popup.                                                                                          |
+| Fig command catalog   | Uses open-source Fig specs for commands, subcommands, options, descriptions, icons, and dynamic suggestions.                                                             |
+| File and folder paths | Suggests paths for commands such as `cd`, `code`, and `rm`, including parent-folder navigation.                                                                          |
+| Caret-following popup | Positions the native macOS suggestion panel near the insertion point in Apple Terminal.                                                                                  |
+| Keyboard navigation   | Filter and scroll through suggestions with arrow keys; use Enter or Tab to insert, and Escape to dismiss.                                                                |
+| Flexible descriptions | Show the selected suggestion’s details beside the list or below it with `⌘I`.                                                                                            |
+| zsh integration       | Works in Apple Terminal with zsh. See the [keyboard guide](apps/docs/content/docs/keyboard-controls.mdx) and [completion guide](apps/docs/content/docs/completions.mdx). |
+
+I started using Fig before [Amazon acquired Fig's technology](https://techcrunch.com/2023/08/29/amazon-fig-command-line-terminal-generative-ai/) and loved its autocomplete. When Kiro [announced that CLI v3 would retire inline shell autocomplete](https://kiro.dev/blog/cli-3/), I was sad to lose it. Cue is my attempt to bring that experience back.
 
 ## Installation
 
-Homebrew is the planned installation method:
+### Homebrew
+
+Cue's formula lives in `Formula/cue.rb` in this repository. The first GitHub release archive has not been published yet, so Homebrew installation is not available yet. Once it is released, install Cue with [Homebrew](https://brew.sh):
 
 ```bash
+brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
 brew install 8starlabs/cue/cue
 ```
 
-The tap and release are not published yet. Until then, see the [getting started guide](apps/docs/content/docs/getting-started.mdx) to build Cue from source.
+After installing, add Cue's zsh integration to `~/.zshrc` and open a new Terminal window:
+
+```bash
+source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"
+```
+
+### From source
+
+Until the first Homebrew release is available, build Cue from source. This requires Node.js 22 or later, pnpm 10 or later, and Xcode Command Line Tools:
+
+```bash
+git clone https://github.com/8starlabs/cue.git
+cd cue
+pnpm install
+pnpm build:app
+source "$PWD/packages/cue/zsh/cue.zsh"
+```
+
+For persistent shell setup, updates, and removal, see the [getting started guide](apps/docs/content/docs/getting-started.mdx) and [Homebrew guide](apps/docs/content/docs/homebrew.mdx).
+
+## Versioning and releases
+
+Cue uses semantic versions. The app version in `packages/cue/package.json` is the source of truth; the workspace version and Homebrew formula version and release URL must match it. Run `pnpm version:check` to catch mismatches.
+
+To prepare a release, synchronize the version in both package manifests and `Formula/cue.rb`, including the formula's `vX.Y.Z` archive URL. Run `pnpm release:cue`, copy its printed SHA-256 into the formula, then run `pnpm version:check`. Commit and push those changes, tag that commit as `vX.Y.Z`, and attach the generated archive from `release-assets/` to the GitHub Release in this same repository. The current packaging script builds for the Mac architecture it's run on (currently Apple Silicon only).
 
 ## Development
 
@@ -35,6 +78,10 @@ Cue uses the open-source [`@withfig/autocomplete`](https://github.com/withfig/au
 
 ## Contact
 
-Kei Lok — [X](https://www.x.com/keiloktql/) · [LinkedIn](https://www.linkedin.com/in/keiloktql/)
+- Tham Kei Lok (Lead Engineer & Developer Relations) — [X](https://www.x.com/keiloktql/), [LinkedIn](https://www.linkedin.com/in/keiloktql/)
 
 Engineered by [8StarLabs](https://8starlabs.com).
+
+## License
+
+[MIT](LICENSE)
