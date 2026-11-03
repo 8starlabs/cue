@@ -1,6 +1,5 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 import { appName, gitConfig } from "./shared";
-import { ArrowUpRight } from "lucide-react";
 import { CueMark } from "@/components/cue-mark";
 
 export function baseOptions(): BaseLayoutProps {
@@ -15,12 +14,7 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       { text: "Docs", url: "/docs" },
-      {
-        text: "GitHub",
-        url: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
-        external: true,
-        icon: <ArrowUpRight size={13} />,
-      },
+      { text: "Changelog", url: "/changelogs" },
     ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };

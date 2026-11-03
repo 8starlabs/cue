@@ -1,0 +1,45 @@
+---
+title: Prepare a release
+description: Version Cue, write release notes, and publish a GitHub Release.
+---
+
+## Pushes do not create releases
+
+Normal commits, pull requests, and pushes do not change Cue's version or publish a release. A release is an explicit maintainer action.
+
+## Prepare the version and notes
+
+From the repository root, choose the next semantic version and synchronize both package manifests and the Homebrew formula:
+
+```sh
+pnpm version:cue 0.2.0
+pnpm changelog:new
+```
+
+Replace `0.2.0` with the version being released. The first release can use the version already in the package manifest. The version command updates the formula URL and marks its SHA-256 as pending. The changelog command creates `changelogs/v0.2.0.mdx`; edit the file to describe the changes users will notice. Use normal Markdown and keep the version and date in its frontmatter.
+
+## Build and validate the release
+
+On an Apple Silicon Mac, run:
+
+```sh
+pnpm changelog:check
+pnpm release:cue
+pnpm version:check
+```
+
+`release:cue` builds `release-assets/cue-0.2.0-macos-arm64.tar.gz`, calculates its SHA-256, and writes that checksum into `Formula/cue.rb`. The formula, package versions, archive URL, and notes must agree before publishing.
+
+## Publish on GitHub
+
+Install [GitHub CLI](https://cli.github.com/) and authenticate once with `gh auth login`. Commit and push the version, formula, and changelog changes. Then run:
+
+```sh
+pnpm release:publish
+```
+
+This checks that the worktree is clean and the release commit is synced with its upstream branch. It creates and pushes the `v0.2.0` tag, then creates a GitHub Release in the Cue repository, attaches the archive, and uses the matching MDX changelog body as release notes. It can finish a release again if the tag was pushed but the GitHub Release step failed.
+
+After publication, the matching formula URL resolves to the attached asset. Homebrew users can discover it with `brew update` and install or upgrade Cue from the tap.
+
+The release packager currently supports Apple Silicon only. Do not publish a release until the changelog, archive, formula checksum, and version checks all pass.

@@ -12,6 +12,8 @@ const formulaVersion = formula.match(/^\s+version "([^"]+)"$/m)?.[1];
 const formulaUrl = formula.match(/^\s+url "([^"]+)"$/m)?.[1] ?? "";
 const formulaSha = formula.match(/^\s+sha256 "([^"]+)"$/m)?.[1] ?? "";
 const version = cueManifest.version;
+const allowPendingSha = process.argv.includes("--allow-pending-sha");
+const pendingSha = "0".repeat(64);
 
 const mismatches = [];
 if (!/^\d+\.\d+\.\d+$/.test(version)) {
@@ -30,6 +32,10 @@ if (!formulaUrl.includes(`/download/v${version}/cue-${version}-macos-`)) {
 }
 if (!/^[a-f0-9]{64}$/.test(formulaSha)) {
   mismatches.push("Formula/cue.rb SHA-256 is missing or malformed");
+} else if (formulaSha === pendingSha && !allowPendingSha) {
+  mismatches.push(
+    "Formula/cue.rb SHA-256 is pending; run pnpm release:cue to generate the archive hash",
+  );
 }
 
 if (mismatches.length > 0) {

@@ -14,11 +14,39 @@ export const metadata: Metadata = {
   description: "IDE-style command suggestions for Apple Terminal.",
 };
 
+function SearchFooter() {
+  return (
+    <div className="cue-search-footer" aria-label="Search keyboard shortcuts">
+      <span>
+        <kbd>↑</kbd>
+        <kbd>↓</kbd> Navigate
+      </span>
+      <span>
+        <kbd>↵</kbd> Open page
+      </span>
+      <span className="cue-search-close">
+        <kbd>Esc</kbd> Close
+      </span>
+    </div>
+  );
+}
+
 export default function Layout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            links: [
+              ["Get started", "/docs/getting-started"],
+              ["Keyboard controls", "/docs/keyboard-controls"],
+              ["How suggestions work", "/docs/completions"],
+            ],
+            options: { footer: <SearchFooter /> },
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );

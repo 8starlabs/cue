@@ -55,3 +55,32 @@ The Husky pre-commit hook formats staged files with Prettier, runs ESLint on sta
 - Include the checks you ran; add screenshots for documentation site changes.
 - Preserve Terminal focus and the existing keyboard behavior when changing autocomplete.
 - Do not commit credentials, personal machine paths, or generated build output.
+
+## Prepare and publish a release
+
+Regular commits and pushes do not create versions or releases. When a release is ready, choose the next semantic version and create its notes. The source of truth is `packages/cue/package.json`; the workspace manifest and Homebrew formula version and archive URL must match it. `pnpm version:check` checks those values.
+
+```bash
+pnpm version:cue 0.2.0
+pnpm changelog:new
+```
+
+Replace `0.2.0` with the version being released. The first release can use the version already in the package manifest. `version:cue` synchronizes the root and app manifests, updates the Homebrew formula version and `vX.Y.Z` archive URL, and marks the formula checksum as pending. `changelog:new` creates `changelogs/v0.2.0.mdx`; edit it with the user-visible changes. The same Markdown body appears on the site at `/changelogs` and in the GitHub Release.
+
+Build the release archive and let the script update the formula checksum:
+
+```bash
+pnpm changelog:check
+pnpm release:cue
+pnpm version:check
+```
+
+This package currently supports Apple Silicon only. Commit and push the version, formula, and changelog changes. Install and authenticate [GitHub CLI](https://cli.github.com/) with `gh auth login`, then run:
+
+```bash
+pnpm release:publish
+```
+
+The command requires a clean worktree and an upstream-synced commit. It creates and pushes the `vX.Y.Z` tag, then creates the GitHub Release in this repository, attaches the archive from `release-assets/`, and takes its release notes from `changelogs/vX.Y.Z.mdx`. It can complete the GitHub Release step again if a previous run already pushed the matching tag. No release is created just because code is pushed.
+
+See the [release guide](/docs/releasing) for the same process in the documentation site.

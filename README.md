@@ -41,11 +41,9 @@ source "$PWD/packages/cue/zsh/cue.zsh"
 
 For persistent shell setup, updates, and removal, see the [getting started guide](apps/docs/content/docs/getting-started.mdx) and [Homebrew guide](apps/docs/content/docs/homebrew.mdx).
 
-## Versioning and releases
+## Changelog
 
-Cue uses semantic versions. The app version in `packages/cue/package.json` is the source of truth; the workspace version and Homebrew formula version and release URL must match it. Run `pnpm version:check` to catch mismatches.
-
-To prepare a release, synchronize the version in both package manifests and `Formula/cue.rb`, including the formula's `vX.Y.Z` archive URL. Run `pnpm release:cue`, copy its printed SHA-256 into the formula, then run `pnpm version:check`. Commit and push those changes, tag that commit as `vX.Y.Z`, and attach the generated archive from `release-assets/` to the GitHub Release in this same repository. The current packaging script builds for the Mac architecture it's run on (currently Apple Silicon only).
+Cue keeps one dated MDX entry per release in [`changelogs/`](changelogs/). Ordinary pushes do not create versions. See [CONTRIBUTION.md](CONTRIBUTION.md#prepare-and-publish-a-release) for the release workflow.
 
 ## Development
 

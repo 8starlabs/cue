@@ -1,79 +1,208 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown, CornerDownLeft, FolderGit2, GitBranch, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CueMark } from "@/components/cue-mark";
 
-const suggestions = [
+const scenes = [
   {
-    command: "checkout",
-    hint: "[branch, file, tag or commit]",
-    description: "Switch branches or restore working tree files",
-    icon: GitBranch,
+    path: "~/work/project",
+    command: "git c",
+    match: "c",
+    category: "Git commands",
+    suggestions: [
+      {
+        name: "checkout",
+        hint: "[branch, file, tag or commit]",
+        description: "Switch branches or restore working tree files",
+        icon: "/fig-icons/command.png",
+        kind: "command",
+      },
+      {
+        name: "cherry-pick",
+        hint: "<commit>",
+        description: "Apply changes from an existing commit",
+        icon: "/fig-icons/command.png",
+        kind: "command",
+      },
+      {
+        name: "commit",
+        hint: '-m "message"',
+        description: "Record changes to the repository",
+        icon: "/fig-icons/command.png",
+        kind: "command",
+      },
+      {
+        name: "clean",
+        hint: "<path>",
+        description: "Remove untracked files from the working tree",
+        icon: "/fig-icons/command.png",
+        kind: "command",
+      },
+    ],
   },
   {
-    command: "cherry-pick",
-    hint: "<commit>",
-    description: "Apply the changes introduced by an existing commit",
-    icon: GitBranch,
+    path: "~/work/project",
+    command: "git checkout ma",
+    match: "ma",
+    category: "Branches",
+    suggestions: [
+      {
+        name: "main",
+        hint: "Current branch",
+        description: "Current branch",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+      {
+        name: "main-dev",
+        hint: "Branch",
+        description: "Local branch",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+      {
+        name: "marketing-site",
+        hint: "Branch",
+        description: "Local branch",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+    ],
   },
   {
-    command: "commit",
-    hint: '-m "message"',
-    description: "Record changes to the repository",
-    icon: Sparkles,
+    path: "~/work",
+    command: "cd D",
+    match: "D",
+    category: "Folders",
+    suggestions: [
+      {
+        name: "Desktop/",
+        hint: "Folder",
+        description: "Folder",
+        icon: "/fig-icons/default-folder-icon.png",
+        kind: "folder",
+      },
+      {
+        name: "Documents/",
+        hint: "Folder",
+        description: "Folder",
+        icon: "/fig-icons/default-folder-icon.png",
+        kind: "folder",
+      },
+      {
+        name: "Downloads/",
+        hint: "Folder",
+        description: "Folder",
+        icon: "/fig-icons/default-folder-icon.png",
+        kind: "folder",
+      },
+    ],
+  },
+  {
+    path: "~/work/project",
+    command: "rm ",
+    match: "",
+    category: "Files",
+    suggestions: [
+      {
+        name: "README.md",
+        hint: "File",
+        description: "Markdown file",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+      {
+        name: "package.json",
+        hint: "File",
+        description: "Project manifest",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+      {
+        name: "pnpm-lock.yaml",
+        hint: "File",
+        description: "Package lockfile",
+        icon: "/fig-icons/default-file-icon.png",
+        kind: "file",
+      },
+    ],
   },
 ];
 
-const closeDuration = 150;
-const demoCommand = "git ch";
+const characterDelay = 74;
+const popupDelay = 360;
+const popupDuration = 1650;
+const closeDuration = 160;
 
 export function CommandDemo() {
-  const [open, setOpen] = useState(true);
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const [typedLength, setTypedLength] = useState(0);
+  const [popupOpen, setPopupOpen] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [typedCommand, setTypedCommand] = useState("");
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const selected = suggestions[0];
-  const suggestionsVisible = open && typedCommand === demoCommand;
+
+  const scene = scenes[sceneIndex];
+  const typedCommand = scene.command.slice(0, typedLength);
+  const selected = scene.suggestions[0];
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setTypedCommand(demoCommand);
-      return;
-    }
-
-    let index = 0;
+    let active = true;
     let timer: ReturnType<typeof setTimeout>;
 
-    function typeNextCharacter() {
-      index += 1;
-      setTypedCommand(demoCommand.slice(0, index));
-
-      if (index < demoCommand.length) {
-        timer = setTimeout(typeNextCharacter, 110);
-      }
+    function schedule(callback: () => void, delay: number) {
+      timer = setTimeout(() => {
+        if (active) callback();
+      }, delay);
     }
 
-    timer = setTimeout(typeNextCharacter, 550);
+    function playScene(index: number) {
+      const nextScene = scenes[index];
+      setSceneIndex(index);
+      setTypedLength(0);
+      setPopupOpen(false);
+      setClosing(false);
 
-    return () => clearTimeout(timer);
+      let position = 0;
+
+      function typeNextCharacter() {
+        position += 1;
+        setTypedLength(position);
+
+        if (position < nextScene.command.length) {
+          schedule(typeNextCharacter, characterDelay);
+          return;
+        }
+
+        schedule(() => {
+          setPopupOpen(true);
+          schedule(() => {
+            setPopupOpen(false);
+            setClosing(true);
+            schedule(() => playScene((index + 1) % scenes.length), closeDuration);
+          }, popupDuration);
+        }, popupDelay);
+      }
+
+      schedule(typeNextCharacter, 120);
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setTypedLength(scenes[0].command.length);
+      setPopupOpen(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    schedule(() => playScene(0), 180);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, []);
 
-  function openDropdown() {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    setClosing(false);
-    requestAnimationFrame(() => setOpen(true));
-  }
-
-  function closeDropdown() {
-    setOpen(false);
-    setClosing(true);
-    closeTimer.current = setTimeout(() => setClosing(false), closeDuration);
-  }
-
-  const toggle = open ? closeDropdown : openDropdown;
-
   return (
-    <div className="terminal-demo">
+    <div className="terminal-demo" aria-label="Cue terminal autocomplete preview">
       <div className="terminal-titlebar">
         <div className="window-dots" aria-hidden="true">
           <i />
@@ -81,76 +210,65 @@ export function CommandDemo() {
           <i />
         </div>
         <div className="terminal-title">
-          <FolderGit2 size={13} /> cue-playground — zsh
+          <CueMark className="terminal-brand-mark" />
+          Cue
         </div>
-        <span className="terminal-size">80 × 24</span>
-        <button
-          className="demo-toggle"
-          onClick={toggle}
-          aria-expanded={suggestionsVisible}
-          aria-controls="cue-demo-suggestions"
-          aria-label={open ? "Hide command suggestions" : "Show command suggestions"}
-        >
-          <span>{open ? "Hide" : "Show"}</span>
-          <span className={`toggle-indicator ${open ? "is-on" : ""}`} />
-        </button>
       </div>
       <div className="terminal-screen">
-        <div className="terminal-path">~/work/project</div>
         <div className="terminal-line">
           <span className="terminal-user">dev</span>
           <span className="terminal-at">@</span>
-          <span className="terminal-host">terminal</span>
+          <span className="terminal-host">macbook</span>
+          <span className="terminal-path-inline"> {scene.path}</span>
           <span className="terminal-prompt"> % </span>
           <span>{typedCommand}</span>
-          <span className="terminal-caret" aria-hidden="true" />
-        </div>
-        <div className="suggestion-anchor">
-          <div
-            id="cue-demo-suggestions"
-            className={`t-dropdown suggestion-menu ${suggestionsVisible ? "is-open" : ""} ${closing ? "is-closing" : ""}`}
-            data-origin="top-left"
-            role="listbox"
-            aria-label="Git command suggestions"
-            aria-hidden={!suggestionsVisible}
-          >
-            {suggestions.map(({ command, hint, icon: Icon }, index) => (
+          <span className="caret-anchor">
+            <span className="terminal-caret" aria-hidden="true" />
+            <div className="suggestion-anchor">
               <div
-                className={`suggestion-row ${index === 0 ? "is-selected" : ""}`}
-                key={command}
-                role="option"
-                aria-selected={index === 0}
+                id="cue-demo-suggestions"
+                className={`t-dropdown suggestion-menu ${popupOpen ? "is-open" : ""} ${closing ? "is-closing" : ""}`}
+                data-origin="top-left"
+                role="listbox"
+                aria-label={`${scene.category} suggestions`}
+                aria-hidden={!popupOpen}
               >
-                <Icon size={13} strokeWidth={2.1} />
-                <span className="suggestion-name">
-                  <b>{command.slice(0, 2)}</b>
-                  {command.slice(2)}
-                </span>
-                <span className="suggestion-hint">{hint}</span>
+                {scene.suggestions.map(({ name, hint, icon, kind }, index) => {
+                  const matchedCharacters = name.toLowerCase().startsWith(scene.match.toLowerCase())
+                    ? scene.match.length
+                    : 0;
+
+                  return (
+                    <div
+                      className={`suggestion-row ${index === 0 ? "is-selected" : ""}`}
+                      key={name}
+                      role="option"
+                      aria-selected={index === 0}
+                    >
+                      <img
+                        className={`suggestion-icon is-${kind}`}
+                        src={icon}
+                        width="16"
+                        height="16"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span className="suggestion-name">
+                        {matchedCharacters > 0 && <b>{name.slice(0, matchedCharacters)}</b>}
+                        {name.slice(matchedCharacters)}
+                      </span>
+                      <span className="suggestion-hint">{hint}</span>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-            <div className="suggestion-footer">
-              <span>↑ ↓ navigate</span>
-              <span>
-                <CornerDownLeft size={11} /> insert
-              </span>
+              <div
+                className={`suggestion-description ${popupOpen ? "is-visible" : ""}`}
+                aria-hidden={!popupOpen}
+              >
+                <p>{selected.description}</p>
+              </div>
             </div>
-          </div>
-          <div
-            className={`suggestion-description ${suggestionsVisible ? "is-visible" : ""}`}
-            aria-hidden={!suggestionsVisible}
-          >
-            <span className="description-kicker">COMMAND</span>
-            <strong>{selected.command}</strong>
-            <p>{selected.description}</p>
-          </div>
-        </div>
-        <div className="demo-bottomline">
-          <span>
-            <span className="green-dot" /> ready
-          </span>
-          <span>
-            Apple Terminal <ChevronDown size={11} />
           </span>
         </div>
       </div>
