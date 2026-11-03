@@ -14,14 +14,19 @@ pnpm install
 
 The app and zsh integration are in `packages/cue/`. The documentation site is in `apps/docs/`.
 
+Run the documentation site locally from the repository root:
+
+```bash
+pnpm dev:docs
+```
+
 ## Develop alongside the Homebrew install
 
 You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue currently supports one running instance at a time because both builds use the same process name and socket. When run from Apple Terminal, the build script stops the running Cue process and opens the local build.
 
-In a Terminal session, point Cue at the local package, load its zsh integration, and build the app:
+From the repository root in Terminal, point Cue at the local package, load its zsh integration, and build the app:
 
 ```bash
-cd ~/Code/cue
 export CUE_HOME="$PWD/packages/cue"
 source "$CUE_HOME/zsh/cue.zsh"
 pnpm build:app

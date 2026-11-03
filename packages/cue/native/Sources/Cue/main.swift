@@ -52,7 +52,11 @@ private enum PopupSide: Equatable {
 private struct PopupPosition {
     let origin: NSPoint
     let side: PopupSide
-    let caretAnchorY: CGFloat?
+}
+
+private struct DirectoryPopupAnchor {
+    let side: PopupSide
+    let caretEdge: CGFloat
 }
 
 final class CueModel: ObservableObject {
@@ -96,7 +100,7 @@ final class CuePanelController {
     private var hasAcceptedSelection = false
     private var acceptedSelectionBuffer: String?
     private var listOrigin = NSPoint.zero
-    private var popupSide = PopupSide.constrained
+    private var directoryPopupAnchor: DirectoryPopupAnchor?
     private var activeVisibleFrame: CGRect?
     private var terminalWindowRect: CGRect?
     private var latestMetadata: RequestMetadata?
@@ -104,7 +108,6 @@ final class CuePanelController {
     private var layoutHotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private let panelGap: CGFloat = 4
-    private let caretPopupGap: CGFloat = 5
     var isVisible: Bool { panel.isVisible }
     private var acceptedCodeCurrentDirectory: Bool {
         hasAcceptedSelection && acceptedSelectionBuffer == "code ."
@@ -144,6 +147,10 @@ final class CuePanelController {
     }
 
     func show(_ completions: [Completion], metadata: RequestMetadata) {
+        guard !metadata.line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            hide(clearDirectoryAnchor: true)
+            return
+        }
         guard !completions.isEmpty,
               NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
             hide()
@@ -152,9 +159,14 @@ final class CuePanelController {
 
         let previousMetadata = latestMetadata
         let previousWindowRect = terminalWindowRect
-        let previousTopY = panel.frame.maxY
-        let wasVisible = panel.isVisible
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
+        let selectedLine = metadata.line.trimmingCharacters(in: .whitespaces)
+        let selectedCDPath = selectedLine == "cd"
+            ? ""
+            : selectedLine.hasPrefix("cd ") ? String(selectedLine.dropFirst(3)) : nil
+        let startedFromParent = selectedCDPath.map {
+            $0 == ".." || $0.hasPrefix("../")
+        } ?? false
         if metadata.action == "selected", metadata.line == "code ." {
             if let currentDirectoryIndex = visibleCompletions.firstIndex(where: {
                 $0.name == "." && $0.insertValue == "."
@@ -162,7 +174,9 @@ final class CuePanelController {
                 let currentDirectory = visibleCompletions.remove(at: currentDirectoryIndex)
                 visibleCompletions.insert(currentDirectory, at: 0)
             }
-        } else if metadata.action == "selected",
+        } else if metadata.action == "selected", selectedCDPath != nil, !startedFromParent {
+            visibleCompletions.removeAll(where: { $0.name == "../" })
+        } else if metadata.action == "selected", startedFromParent,
                   let parentIndex = visibleCompletions.firstIndex(where: { $0.name == "../" }) {
             let parent = visibleCompletions.remove(at: parentIndex)
             visibleCompletions.insert(parent, at: 0)
@@ -182,36 +196,51 @@ final class CuePanelController {
         let combinedSize = combinedPanelSize
         if let position = popupOrigin(metadata: metadata, panelSize: combinedSize) {
             var origin = position.origin
-            let acceptedDirectory = metadata.action == "selected"
-            let sameCaretRow = previousMetadata.map {
-                $0.terminalRow > 0 &&
-                    $0.terminalRow == metadata.terminalRow &&
+            let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect)
+            let isDirectoryPath = metadata.line.hasPrefix("cd ")
+            let sameTerminalContext = previousMetadata.map {
+                $0.line.hasPrefix("cd ") &&
                     $0.columns == metadata.columns &&
                     $0.lines == metadata.lines &&
-                    $0.cwd == metadata.cwd &&
-                    ($0.line.hasPrefix(metadata.line) || metadata.line.hasPrefix($0.line))
+                    $0.cwd == metadata.cwd
             } ?? false
-            let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect)
-            if wasVisible && sameWindow && popupSide == position.side &&
-                position.side != .constrained && (acceptedDirectory || sameCaretRow),
-               let caretAnchorY = position.caretAnchorY {
+            let sameDirectorySession = isDirectoryPath && sameWindow &&
+                sameTerminalContext
+            if !sameDirectorySession { directoryPopupAnchor = nil }
+
+            if sameDirectorySession,
+               let anchor = directoryPopupAnchor,
+               anchor.side == position.side,
+               position.side != .constrained {
                 let visible = activeVisibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-                let minimumY = visible.minY + 8
-                let preservedY = previousTopY - panel.frame.height
-                let preservedMaxY = preservedY + panel.frame.height
-                let staysOnSameSide = position.side == .belowCaret
-                    ? preservedMaxY <= caretAnchorY - caretPopupGap
-                    : preservedY >= caretAnchorY + caretPopupGap
-                if preservedY >= minimumY,
-                   preservedMaxY <= visible.maxY - 8,
-                   staysOnSameSide {
-                    origin.y = preservedY
+                let anchoredY = position.side == .belowCaret
+                    ? anchor.caretEdge - panel.frame.height
+                    : anchor.caretEdge
+                let anchoredMaxY = anchoredY + panel.frame.height
+                let fitsScreen = anchoredY >= visible.minY + 8 && anchoredMaxY <= visible.maxY - 8
+                if fitsScreen {
+                    origin.y = anchoredY
+                } else {
+                    directoryPopupAnchor = nil
                 }
             }
+            if isDirectoryPath && position.side != .constrained {
+                if directoryPopupAnchor == nil || directoryPopupAnchor?.side != position.side {
+                    let caretEdge = position.side == .belowCaret ? origin.y + panel.frame.height : origin.y
+                    directoryPopupAnchor = DirectoryPopupAnchor(
+                        side: position.side,
+                        caretEdge: caretEdge
+                    )
+                }
+            } else {
+                directoryPopupAnchor = nil
+            }
             listOrigin = origin
-            popupSide = position.side
             panel.setFrameOrigin(listOrigin)
             if !descriptionAtBottom { positionDetailsPanel() }
+        } else {
+            hide()
+            return
         }
         panel.orderFrontRegardless()
         if descriptionAtBottom { detailsPanel.orderOut(nil) }
@@ -219,7 +248,7 @@ final class CuePanelController {
         registerLayoutHotKey()
     }
 
-    func hide() {
+    func hide(clearDirectoryAnchor: Bool = false) {
         panel.orderOut(nil)
         detailsPanel.orderOut(nil)
         visibleCompletions = []
@@ -227,9 +256,11 @@ final class CuePanelController {
         suggestionWindowStart = 0
         hasAcceptedSelection = false
         acceptedSelectionBuffer = nil
-        terminalWindowRect = nil
-        latestMetadata = nil
-        popupSide = .constrained
+        if clearDirectoryAnchor {
+            terminalWindowRect = nil
+            latestMetadata = nil
+            directoryPopupAnchor = nil
+        }
         unregisterLayoutHotKey()
     }
 
@@ -312,7 +343,6 @@ final class CuePanelController {
         if let latestMetadata,
            let position = popupOrigin(metadata: latestMetadata, panelSize: combinedPanelSize) {
             listOrigin = position.origin
-            popupSide = position.side
             panel.setFrameOrigin(position.origin)
         }
         if descriptionAtBottom {
@@ -377,6 +407,7 @@ final class CuePanelController {
               !line.contains("\""), !line.contains("'"), !line.contains("\\") else { return nil }
 
         let partial = line == "cd" ? "" : String(line.dropFirst(3))
+        guard partial == ".." || partial.hasPrefix("../") else { return nil }
         let slash = partial.lastIndex(of: "/")
         let directoryPrefix = slash.map { String(partial[...$0]) } ?? ""
         let namePrefix = slash.map { String(partial[partial.index(after: $0)...]) } ?? partial
@@ -440,11 +471,10 @@ final class CuePanelController {
                 axWindowRect = windowElement.flatMap(axRect).flatMap(validWindowRect)
             }
         }
-        let serverWindowRect = windowServerRect(for: terminalPID).flatMap(validWindowRect)
-        // WindowServer and CGDisplayBounds share Quartz's global display
-        // coordinates. Accessibility window bounds can use a different screen
-        // origin on vertically arranged Retina displays, so use AX only as a
-        // fallback for locating the Terminal window.
+        let serverWindowRect = windowServerRect(for: terminalPID, nearestTo: axWindowRect).flatMap(validWindowRect)
+        // Match the focused Accessibility window to its WindowServer frame.
+        // The text-area bounds are translated through that frame so placement
+        // follows the visible Terminal window, including on secondary displays.
         let windowRect = serverWindowRect ?? axWindowRect
         terminalWindowRect = windowRect
 
@@ -454,10 +484,22 @@ final class CuePanelController {
         if AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
            let focusedValue {
             focusedElement = unsafeBitCast(focusedValue, to: AXUIElement.self)
-            if let candidate = focusedElement.flatMap(axRect),
-               candidate.width > 100, candidate.height > 100,
-               candidate.origin.x.isFinite, candidate.origin.y.isFinite,
-               windowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: candidate.midX, y: candidate.midY)) }) ?? false {
+        }
+
+        if let focusedElement,
+           isTerminalTextElement(focusedElement),
+           let candidate = axRect(focusedElement),
+           isPlausibleTerminalTextRect(candidate, inside: axWindowRect) {
+            textRect = candidate
+        }
+
+        var caretRect = focusedElement.flatMap(axCaretRect)
+        if caretRect == nil || textRect == nil,
+           let textElement = terminalTextElement(in: windowElement ?? app, windowRect: axWindowRect) {
+            focusedElement = textElement
+            caretRect = axCaretRect(textElement)
+            if let candidate = axRect(textElement),
+               isPlausibleTerminalTextRect(candidate, inside: axWindowRect) {
                 textRect = candidate
             }
         }
@@ -467,78 +509,143 @@ final class CuePanelController {
             ?? NSScreen.main
             ?? NSScreen.screens.first
         activeVisibleFrame = screen?.visibleFrame
+        let quartzTextRect = textRect.flatMap {
+            quartzRect(
+                fromAccessibility: $0,
+                windowAccessibilityRect: axWindowRect,
+                windowServerRect: serverWindowRect
+            )
+        }
+        let quartzCaretRect = caretRect.flatMap {
+            quartzRect(
+                fromAccessibility: $0,
+                windowAccessibilityRect: axWindowRect,
+                windowServerRect: serverWindowRect
+            )
+        }
+        let popupGap: CGFloat = 4
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
+        let estimatedCellWidth = (quartzTextRect?.width ?? windowRect?.width ?? 800) / CGFloat(columns)
+        let accessibilityCaret = quartzCaretRect.flatMap { caret -> CGRect? in
+            guard caret.width <= max(18, estimatedCellWidth * 1.5),
+                  caret.height > 4,
+                  caret.origin.x.isFinite,
+                  caret.origin.y.isFinite,
+                  (serverWindowRect ?? axWindowRect).map({
+                      $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY))
+                  }) ?? true else { return nil }
+            return caret
+        }
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
-        let fallbackRow = lines - 2
-        let column = absoluteColumn % columns
         var x: CGFloat
         var y: CGFloat
-        var caretAnchorY: CGFloat?
-        if let windowRect, metadata.terminalRow > 0 {
-            // Derive the live column from zsh's measured prompt width and
-            // cursor index. DSR columns can lag after a completion edit, so
-            // don't use them to place the popup horizontally.
-            let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
+        var caretAnchorX: CGFloat?
+        var belowCaretY: CGFloat?
+        var aboveCaretY: CGFloat?
+        if metadata.terminalRow > 0, let textRect = quartzTextRect {
+            // Use Terminal's live cursor report with the actual accessible
+            // text grid. This avoids AX's range bounds, which can point above
+            // the visible insertion caret in Terminal.
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
             let terminalColumn = min(columns - 1, max(0, absoluteColumn % columns))
             let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
-            let anchor = appKitPoint(fromQuartz: CGPoint(
+            let terminalAnchor = appKitPoint(fromQuartz: CGPoint(
                 x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
                 y: textRect.minY + CGFloat(terminalRow + 1) * cellHeight
             ), on: screen)
-            x = anchor.x
-            caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height - caretPopupGap
-        } else if let focusedElement, let caret = axCaretRect(focusedElement),
-           caret.width <= max(18, (textRect?.width ?? windowRect?.width ?? 800) / CGFloat(columns) * 1.5),
-           caret.height > 4, caret.origin.x.isFinite, caret.origin.y.isFinite,
-           axWindowRect.map({ $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY)) }) ?? true {
-            let anchor = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
-            x = anchor.x
-            caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height - caretPopupGap
-        } else if let windowRect {
-            let textRect = textRect ?? windowRect.insetBy(dx: 12, dy: 34)
-            let cellWidth = textRect.width / CGFloat(columns)
-            let cellHeight = textRect.height / CGFloat(lines)
-            let anchor = appKitPoint(fromQuartz: CGPoint(
-                x: textRect.minX + CGFloat(column) * cellWidth,
-                y: textRect.minY + CGFloat(max(0, fallbackRow + 1)) * cellHeight
-            ), on: screen)
-            x = anchor.x
-            caretAnchorY = anchor.y
-            y = anchor.y - panelSize.height - caretPopupGap
+            x = terminalAnchor.x
+            caretAnchorX = terminalAnchor.x
+            belowCaretY = terminalAnchor.y
+            aboveCaretY = terminalAnchor.y + cellHeight
+            y = terminalAnchor.y - panelSize.height - popupGap
+        } else if let caret = accessibilityCaret {
+            let lowerEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
+            let upperEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.minY), on: screen)
+            x = lowerEdge.x
+            caretAnchorX = lowerEdge.x
+            belowCaretY = lowerEdge.y
+            aboveCaretY = upperEdge.y
+            y = lowerEdge.y - panelSize.height - popupGap
         } else {
-            let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-            let estimatedColumn = CGFloat(absoluteColumn) * 8.5
-            x = visible.minX + 18 + estimatedColumn
-            y = visible.minY + 110
+            return nil
         }
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let edgePadding: CGFloat = 8
         let maxOriginY = max(visible.minY + edgePadding, visible.maxY - panelSize.height - edgePadding)
         var side = PopupSide.constrained
-        if let caretAnchorY {
-            let availableBelow = caretAnchorY - visible.minY - edgePadding - caretPopupGap
-            let availableAbove = visible.maxY - caretAnchorY - edgePadding - caretPopupGap
-            if availableBelow >= panelSize.height {
-                y = caretAnchorY - panelSize.height - caretPopupGap
-                side = .belowCaret
-            } else if availableAbove >= panelSize.height {
-                y = caretAnchorY + caretPopupGap
-                side = .aboveCaret
-            } else if availableAbove > availableBelow {
-                y = caretAnchorY + caretPopupGap
+        if let belowCaretY, let aboveCaretY {
+            let availableBelow = belowCaretY - visible.minY - edgePadding - popupGap
+            let availableAbove = visible.maxY - aboveCaretY - edgePadding - popupGap
+            // Prefer the familiar below-caret placement while it fits. Flip
+            // above the caret at the bottom edge; if neither side can fit the
+            // whole panel, use the roomier side and clamp it to this display.
+            side = if availableBelow >= panelSize.height {
+                .belowCaret
+            } else if availableAbove >= panelSize.height || availableAbove > availableBelow {
+                .aboveCaret
             } else {
-                y = caretAnchorY - panelSize.height - caretPopupGap
+                .belowCaret
             }
+            y = side == .aboveCaret
+                ? aboveCaretY + popupGap
+                : belowCaretY - panelSize.height - popupGap
         }
         y = min(max(y, visible.minY + edgePadding), maxOriginY)
-        let maxOriginX = max(visible.minX + edgePadding, visible.maxX - panelSize.width - edgePadding)
+        let minOriginX = visible.minX + edgePadding
+        let maxOriginX = max(minOriginX, visible.maxX - panelSize.width - edgePadding)
+        if let caretAnchorX {
+            let availableRight = visible.maxX - edgePadding - caretAnchorX
+            let availableLeft = caretAnchorX - minOriginX
+            // Keep the popup's left edge at the caret when it fits to the
+            // right. Near the right display edge, align its right edge instead.
+            if availableRight < panelSize.width && availableLeft > availableRight {
+                x = caretAnchorX - panelSize.width
+            }
+        }
         x = min(max(x, visible.minX + edgePadding), maxOriginX)
-        return PopupPosition(origin: NSPoint(x: x, y: y), side: side, caretAnchorY: caretAnchorY)
+        return PopupPosition(origin: NSPoint(x: x, y: y), side: side)
+    }
+
+    private func terminalTextElement(in root: AXUIElement, windowRect: CGRect?) -> AXUIElement? {
+        var pending: [(element: AXUIElement, depth: Int)] = [(root, 0)]
+        var visited = 0
+        var firstCaretElement: AXUIElement?
+
+        while let current = pending.popLast(), visited < 160 {
+            visited += 1
+            let element = current.element
+            var roleValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+               let role = roleValue as? String,
+               ["AXTextArea", "AXTextEntryArea", "AXTextView", "AXTextField"].contains(role),
+               axCaretRect(element) != nil,
+               let rect = axRect(element),
+               isPlausibleTerminalTextRect(rect, inside: windowRect) {
+                var focusedValue: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, kAXFocusedAttribute as CFString, &focusedValue) == .success,
+                   (focusedValue as? NSNumber)?.boolValue == true {
+                    return element
+                }
+                if firstCaretElement == nil { firstCaretElement = element }
+            }
+
+            guard current.depth < 7 else { continue }
+            var childrenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+               let children = childrenValue as? [AXUIElement] {
+                pending.append(contentsOf: children.map { ($0, current.depth + 1) })
+            }
+        }
+        return firstCaretElement
+    }
+
+    private func isTerminalTextElement(_ element: AXUIElement) -> Bool {
+        var roleValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+              let role = roleValue as? String else { return false }
+        return ["AXTextArea", "AXTextEntryArea", "AXTextView", "AXTextField"].contains(role)
     }
 
     private func rectsMatch(_ lhs: CGRect?, _ rhs: CGRect?) -> Bool {
@@ -547,6 +654,25 @@ final class CuePanelController {
             abs(lhs.origin.y - rhs.origin.y) < 1 &&
             abs(lhs.width - rhs.width) < 1 &&
             abs(lhs.height - rhs.height) < 1
+    }
+
+    private func isPlausibleTerminalTextRect(_ rect: CGRect, inside windowRect: CGRect?) -> Bool {
+        guard rect.width > 100,
+              rect.height > 100,
+              rect.origin.x.isFinite,
+              rect.origin.y.isFinite,
+              rect.width.isFinite,
+              rect.height.isFinite else { return false }
+        guard let windowRect else { return true }
+
+        // Terminal's accessibility text view can temporarily report its
+        // scrollback-sized bounds after a clear/scroll. Only use a grid frame
+        // that still describes the visible text area in the focused window.
+        let tolerance: CGFloat = 24
+        let expandedWindow = windowRect.insetBy(dx: -tolerance, dy: -tolerance)
+        return rect.width <= windowRect.width + tolerance * 2 &&
+            rect.height <= windowRect.height + tolerance * 2 &&
+            expandedWindow.contains(CGPoint(x: rect.midX, y: rect.midY))
     }
 
     private func screenForTerminalWindow(_ rect: CGRect) -> NSScreen? {
@@ -571,6 +697,24 @@ final class CuePanelController {
         )
     }
 
+    private func quartzRect(
+        fromAccessibility rect: CGRect,
+        windowAccessibilityRect: CGRect?,
+        windowServerRect: CGRect?
+    ) -> CGRect? {
+        guard let windowAccessibilityRect, let windowServerRect else { return rect }
+        let localRect = rect.offsetBy(
+            dx: -windowAccessibilityRect.minX,
+            dy: -windowAccessibilityRect.minY
+        )
+        let localWindowBounds = CGRect(origin: .zero, size: windowAccessibilityRect.size)
+            .insetBy(dx: -8, dy: -8)
+        guard localWindowBounds.contains(CGPoint(x: localRect.midX, y: localRect.midY)),
+              localRect.width <= localWindowBounds.width,
+              localRect.height <= localWindowBounds.height else { return nil }
+        return localRect.offsetBy(dx: windowServerRect.minX, dy: windowServerRect.minY)
+    }
+
     private func axCaretRect(_ element: AXUIElement) -> CGRect? {
         var rangeValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
@@ -587,17 +731,22 @@ final class CuePanelController {
         rect.width > 200 && rect.height > 100 && rect.origin.x.isFinite && rect.origin.y.isFinite ? rect : nil
     }
 
-    private func windowServerRect(for pid: pid_t) -> CGRect? {
+    private func windowServerRect(for pid: pid_t, nearestTo referenceRect: CGRect?) -> CGRect? {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return nil }
-        for window in windows {
+        let candidates = windows.compactMap { window -> CGRect? in
             guard (window[kCGWindowOwnerPID as String] as? Int) == Int(pid),
                   (window[kCGWindowLayer as String] as? Int) == 0,
                   let bounds = window[kCGWindowBounds as String] as? NSDictionary,
-                  let rect = CGRect(dictionaryRepresentation: bounds) else { continue }
+                  let rect = CGRect(dictionaryRepresentation: bounds),
+                  validWindowRect(rect) != nil else { return nil }
             return rect
         }
-        return nil
+        guard let referenceRect else { return candidates.first }
+        return candidates.min { lhs, rhs in
+            hypot(lhs.midX - referenceRect.midX, lhs.midY - referenceRect.midY) <
+                hypot(rhs.midX - referenceRect.midX, rhs.midY - referenceRect.midY)
+        }
     }
 
     private func axRect(_ element: AXUIElement) -> CGRect? {
@@ -754,7 +903,12 @@ struct CueIcon: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let image = figImage(icon, kind: kind, name: name, suggestionType: suggestionType) {
             ZStack(alignment: .bottomTrailing) {
-                Image(nsImage: image).resizable().scaledToFit().padding(1)
+                Image(nsImage: image)
+                    .resizable()
+                    .renderingMode(image.isTemplate ? .template : .original)
+                    .scaledToFit()
+                    .foregroundStyle(Color(red: 0.66, green: 0.82, blue: 0.98))
+                    .padding(1)
                 if let badge = iconBadge(icon) {
                     Text(badge)
                         .font(.system(size: 7, weight: .bold))
@@ -810,6 +964,33 @@ struct CueIcon: View {
         return type
     }
 
+    private func materialIconThemeName(for name: String) -> String? {
+        let fileName = URL(fileURLWithPath: name).lastPathComponent.lowercased()
+
+        // Follow the Material Icon Theme's filename overrides before extension rules.
+        if fileName == "package.json" || fileName == "package-lock.json" {
+            return "nodejs"
+        }
+        if fileName.hasPrefix("next.config.") {
+            return "next"
+        }
+        if fileName.hasPrefix("eslint.") || fileName.hasPrefix(".eslintrc")
+            || [".eslintignore", ".eslintcache"].contains(fileName) {
+            return "eslint"
+        }
+        if ["d.ts", "d.cts", "d.mts"].contains(where: { fileName.hasSuffix(".\($0)") }) {
+            return "typescript-def"
+        }
+
+        let ext = (fileName as NSString).pathExtension
+        switch ext {
+        case "json", "jsonc", "json5": return "json"
+        case "js", "jsx", "mjs", "cjs": return "javascript"
+        case "ts", "tsx", "mts", "cts": return "typescript"
+        default: return nil
+        }
+    }
+
     private func figImage(_ value: String?, kind: String, name: String, suggestionType: String?) -> NSImage? {
         let explicitType = iconType(value)
         if let value, value.hasPrefix("fig://"), !value.hasPrefix("fig://icon"), !value.hasPrefix("fig://template") {
@@ -821,22 +1002,39 @@ struct CueIcon: View {
                 return image
             }
         }
-        let fallbackType: String
+        let fallbackTypes: [String]
         switch suggestionType {
-        case "subcommand", "command": fallbackType = "command"
-        case "option": fallbackType = "option"
-        case "folder": fallbackType = "default-folder-icon"
-        case "file": fallbackType = "default-file-icon"
+        case "subcommand", "command": fallbackTypes = ["command"]
+        case "option": fallbackTypes = ["option"]
+        case "folder": fallbackTypes = ["default-folder-icon"]
+        case "file":
+            fallbackTypes = [materialIconThemeName(for: name).map { "material-icon-theme-\($0)" }, "material-icon-theme-document"].compactMap { $0 }
         default:
             switch kind {
-            case "command": fallbackType = "command"
-            case "option": fallbackType = "option"
-            default: fallbackType = name.hasSuffix("/") ? "default-folder-icon" : "default-file-icon"
+            case "command": fallbackTypes = ["command"]
+            case "option": fallbackTypes = ["option"]
+            default:
+                if name.hasSuffix("/") {
+                    fallbackTypes = ["default-folder-icon"]
+                } else {
+                    fallbackTypes = [materialIconThemeName(for: name).map { "material-icon-theme-\($0)" }, "material-icon-theme-document"].compactMap { $0 }
+                }
             }
         }
 
-        let types = explicitType.isEmpty ? [fallbackType] : [explicitType, fallbackType]
+        let types =
+            explicitType.isEmpty || explicitType == "file" || explicitType == "default-file-icon"
+            ? fallbackTypes
+            : [explicitType] + fallbackTypes
         for type in types {
+            if type.hasPrefix("material-icon-theme-") {
+                let iconName = String(type.dropFirst("material-icon-theme-".count))
+                let url = Bundle.main.bundleURL
+                    .appendingPathComponent("Contents/Resources/MaterialIconTheme", isDirectory: true)
+                    .appendingPathComponent(iconName == "document" ? "document.svg" : "icons/\(iconName).svg")
+                if let image = NSImage(contentsOf: url) { return image }
+                continue
+            }
             for ext in ["png", "svg"] {
                 let url = Bundle.main.bundleURL
                     .appendingPathComponent("Contents/Resources/FigIcons", isDirectory: true)
@@ -1093,18 +1291,18 @@ final class CueService {
 
     private func submit(_ metadata: RequestMetadata) {
         if metadata.action == "hide" {
-            // Hide on the next main-thread turn instead of waiting behind
-            // completion work queued on the engine.
-            DispatchQueue.main.async { self.panelController.hide() }
             latestIDLock.lock()
             latestID += 1
             let hideID = latestID
             latestIDLock.unlock()
+            // Invalidate older completions before queuing the hide. A worker
+            // response already headed to the main queue must not reopen it.
+            DispatchQueue.main.async {
+                guard self.isCurrentRequest(hideID) else { return }
+                self.panelController.hide(clearDirectoryAnchor: true)
+            }
             engineQueue.async {
-                self.latestIDLock.lock()
-                let isStillHidden = self.latestID == hideID
-                self.latestIDLock.unlock()
-                if isStillHidden { self.latestRequest = nil }
+                if self.isCurrentRequest(hideID) { self.latestRequest = nil }
             }
             return
         }
@@ -1150,6 +1348,12 @@ final class CueService {
         }
     }
 
+    private func isCurrentRequest(_ id: Int) -> Bool {
+        latestIDLock.lock()
+        defer { latestIDLock.unlock() }
+        return latestID == id
+    }
+
     private func consumeWorkerOutput(_ data: Data) {
         engineQueue.async { [weak self] in
             guard let self else { return }
@@ -1166,6 +1370,7 @@ final class CueService {
                 if isLatest, let metadata {
                     self.cacheCompletions(response.completions, for: metadata)
                     DispatchQueue.main.async {
+                        guard self.isCurrentRequest(response.id) else { return }
                         self.model.completions = response.completions
                         self.model.selectedIndex = 0
                         if !response.completions.isEmpty {

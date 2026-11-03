@@ -808,6 +808,17 @@ html > body[data-scroll-locked] {
   font-family: var(--font-mono);
   font-size: 10px;
 }
+.footer-license {
+  color: inherit;
+  transition: color 150ms ease;
+}
+.footer-license:hover {
+  color: #fff;
+}
+.footer-license:focus-visible {
+  outline: 2px solid #f2dc77;
+  outline-offset: 4px;
+}
 .footer-meta-links {
   display: flex;
   flex-wrap: wrap;

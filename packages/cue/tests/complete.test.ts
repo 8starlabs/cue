@@ -63,7 +63,7 @@ describe("Fig-style completion specs", () => {
     expect(nextPath.some(({ name, kind }) => name === "." && kind === "enter")).toBe(false);
   });
 
-  it("offers the current directory by default for directory listing and search commands", async () => {
+  it("waits for a space before suggesting command arguments and shows one current-directory row", async () => {
     const specs: FigSpec[] = [
       {
         name: "ls",
@@ -82,19 +82,30 @@ describe("Fig-style completion specs", () => {
     ];
 
     for (const spec of specs) {
-      for (const line of [spec.name, `${spec.name} `]) {
-        const suggestions = await complete(line, workspace, spec);
-        expect(suggestions[0]).toMatchObject({
-          name: ".",
-          description: expect.any(String),
-          insertValue: ".",
-          kind: "enter",
-        });
-      }
+      await expect(complete(spec.name, workspace, spec)).resolves.toEqual([]);
+
+      const suggestions = await complete(`${spec.name} `, workspace, spec);
+      expect(suggestions[0]).toMatchObject({
+        name: ".",
+        description: expect.any(String),
+        insertValue: ".",
+        kind: "enter",
+      });
+      expect(suggestions.filter(({ name }) => name === ".")).toHaveLength(1);
     }
 
-    const lsSuggestions = await complete("ls", workspace, specs[0]);
+    const lsSuggestions = await complete("ls ", workspace, specs[0]);
     expect(lsSuggestions.some(({ name }) => name === "-a")).toBe(true);
+  });
+
+  it("waits for a space after exact commands such as clear", async () => {
+    const spec: FigSpec = {
+      name: "clear",
+      args: { suggestions: ["screen"] },
+    };
+
+    await expect(complete("clear", workspace, spec)).resolves.toEqual([]);
+    expect((await complete("clear ", workspace, spec)).map(({ name }) => name)).toContain("screen");
   });
 
   it("does not default the current directory for destructive or later path arguments", async () => {
@@ -116,6 +127,9 @@ describe("Fig-style completion specs", () => {
   });
 
   it("keeps parent navigation available after each ../ path segment", async () => {
+    await expect(complete("cd", workspace)).resolves.toEqual([]);
+    expect((await complete("cd ", workspace)).map(({ name }) => name)).toContain("../");
+
     const firstParent = await complete("cd ../", workspace);
     expect(firstParent[0]).toMatchObject({
       name: "../",
@@ -133,6 +147,17 @@ describe("Fig-style completion specs", () => {
     await expect(complete("cd ../ ", workspace)).resolves.toEqual([]);
   });
 
+  it("does not repeat parent navigation after entering a normal suggested folder", async () => {
+    await mkdir(path.join(workspace, "src", "nested"), { recursive: true });
+
+    const normalPath = await complete("cd src/", workspace);
+    expect(normalPath.some(({ name }) => name === "../")).toBe(false);
+    expect(normalPath.map(({ name }) => name)).toContain("nested/");
+
+    const parentPath = await complete("cd ../", workspace);
+    expect(parentPath[0]).toMatchObject({ name: "../", insertValue: "../../" });
+  });
+
   it("suggests nested commands and their aliases with descriptions", async () => {
     const spec: FigSpec = {
       name: "tool",
@@ -140,6 +165,7 @@ describe("Fig-style completion specs", () => {
         {
           name: ["checkout", "co"],
           description: "Switch branches",
+          args: { suggestions: ["main"] },
         },
       ],
     };
@@ -151,6 +177,14 @@ describe("Fig-style completion specs", () => {
       description: "Switch branches",
       kind: "command",
     });
+    expect((await complete("tool ", workspace, spec)).map(({ name }) => name)).toContain(
+      "checkout",
+    );
+    await expect(complete("tool", workspace, spec)).resolves.toEqual([]);
+    await expect(complete("tool checkout", workspace, spec)).resolves.toEqual([]);
+    expect((await complete("tool checkout ", workspace, spec)).map(({ name }) => name)).toContain(
+      "main",
+    );
   });
 
   it("completes option values with spaces, equals, and declared separators", async () => {
@@ -287,7 +321,9 @@ describe("Fig-style completion specs", () => {
   });
 
   it("offers the current directory before code path completions", async () => {
-    for (const line of ["code", "code ."]) {
+    await expect(complete("code", workspace)).resolves.toEqual([]);
+
+    for (const line of ["code ", "code ."]) {
       const suggestions = await complete(line, workspace);
       expect(suggestions[0]).toMatchObject({
         name: ".",

@@ -1,66 +1,48 @@
 # Cue
 
-![Cue's Homebrew installation command and autocomplete popup in Apple Terminal](assets/social/cue-readme.png)
+![Cue in Apple Terminal](assets/social/cue-readme.png)
 
-Autocomplete for the terminal you already use.
+IDE-style command and path suggestions for Apple Terminal.
 
-Cue brings Fig-style command and path suggestions to Apple Terminal, with helpful descriptions beside the selected suggestion.
+Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquired its technology](https://techcrunch.com/2023/08/29/amazon-fig-command-line-terminal-generative-ai/), and built Cue after Kiro [announced the retirement of inline shell autocomplete](https://kiro.dev/blog/cli-3/).
 
-**Platform:** Cue currently supports Apple Silicon Macs running macOS 13 or later, with Apple Terminal and zsh. It does not currently support Windows, Linux, or other terminal apps.
+**Available on:** Apple Silicon Macs running macOS 13 or later, with Apple Terminal and zsh.
 
-I started using Fig before [Amazon acquired Fig's technology](https://techcrunch.com/2023/08/29/amazon-fig-command-line-terminal-generative-ai/) and loved its autocomplete. When Kiro [announced that CLI v3 would retire inline shell autocomplete](https://kiro.dev/blog/cli-3/), I was sad to lose it. Cue is my attempt to bring that experience back.
+## Install
 
-## Installation
+1. **[Homebrew](https://brew.sh)**
 
-### Homebrew
+   ```sh
+   brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
+   brew install 8starlabs/cue/cue
+   ```
 
-Install Cue from its [Homebrew](https://brew.sh) tap:
+   Add the source command printed by Homebrew to `~/.zshrc`, then open a new Terminal window.
 
-```bash
-brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
-brew install 8starlabs/cue/cue
-```
+2. **Build from source**
 
-After installing, add Cue's zsh integration to `~/.zshrc` and open a new Terminal window:
+   Requires Node.js 22+, pnpm 10+, and Xcode Command Line Tools.
 
-```bash
-source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"
-```
+   ```sh
+   git clone https://github.com/8starlabs/cue.git
+   cd cue
+   pnpm install
+   pnpm build:app
+   source "$PWD/packages/cue/zsh/cue.zsh"
+   ```
 
-### From source
-
-Prefer to build Cue yourself? Installing from source is an alternative to Homebrew. This requires Node.js 22 or later, pnpm 10 or later, and Xcode Command Line Tools:
-
-```bash
-git clone https://github.com/8starlabs/cue.git
-cd cue
-pnpm install
-pnpm build:app
-source "$PWD/packages/cue/zsh/cue.zsh"
-```
-
-For persistent shell setup, updates, and removal, see the [getting started guide](apps/docs/content/docs/getting-started.mdx) and [Homebrew guide](apps/docs/content/docs/homebrew.mdx).
-
-## Changelog
-
-Cue keeps one dated MDX entry per release in [`changelogs/`](changelogs/). Ordinary pushes do not create versions. See [CONTRIBUTION.md](CONTRIBUTION.md#prepare-and-publish-a-release) for the release workflow.
-
-## Development
-
-```bash
-pnpm install
-pnpm dev:docs
-```
-
-The workspace contains the Cue app and shell integration in `packages/cue/`, and the Next.js documentation site in `apps/docs/`.
+macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility**. See the [installation docs](apps/docs/content/docs/getting-started.mdx) for persistent shell setup, updates, and removal.
 
 ## Contributing
 
-See [CONTRIBUTION.md](CONTRIBUTION.md) for setup, checks, and pull request guidance.
+See [CONTRIBUTION.md](CONTRIBUTION.md) for development setup, checks, and release instructions.
 
 ## Credits
 
-Cue uses the open-source [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs.
+- [Fig Autocomplete](https://github.com/withfig/autocomplete) for command specs and Fig icons.
+- [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme) for selected file icons.
+- [`shell-quote`](https://github.com/ljharb/shell-quote) for shell command parsing.
+- [Next.js](https://github.com/vercel/next.js), [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss), [shadcn/ui](https://github.com/shadcn-ui/ui), and [Fumadocs](https://github.com/fuma-nama/fumadocs) for the documentation site.
 
 ## Contact
 

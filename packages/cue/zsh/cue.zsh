@@ -8,9 +8,9 @@ if [[ -d "${CUE_HOME}/packages/cue" && -f "${CUE_HOME}/packages/cue/package.json
   CUE_HOME="${CUE_HOME}/packages/cue"
 fi
 
-# Escape is a prefix for arrow and Meta-key sequences in zsh. Keep that prefix
-# wait short so the standalone Escape binding dismisses Cue immediately.
-typeset -g KEYTIMEOUT=1
+# Escape is a prefix for arrow and Meta-key sequences in zsh. Keep the wait
+# short for quick dismissal, but long enough to recognize Option-Backspace.
+typeset -g KEYTIMEOUT=5
 
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -g CUE_SELECTED_VALUE=''
@@ -200,6 +200,12 @@ _cue_dismiss_widget() {
 }
 zle -N cue_dismiss_widget _cue_dismiss_widget
 bindkey '^[' cue_dismiss_widget
+bindkey -M emacs '^[' cue_dismiss_widget
+bindkey -M emacs '^[^?' backward-kill-word
+bindkey -M emacs '^[^H' backward-kill-word
+bindkey -M viins '^[' cue_dismiss_widget
+bindkey -M viins '^[^?' backward-kill-word
+bindkey -M viins '^[^H' backward-kill-word
 
 _cue_move_selection() {
   local direction="$1"
@@ -357,6 +363,9 @@ _cue_live_watch() {
   local old_buffer="$CUE_LIVE_LAST_BUFFER"
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
+    if [[ -n "$CUE_ACCEPTED_BUFFER" && "$BUFFER" != "$CUE_ACCEPTED_BUFFER"* ]]; then
+      CUE_SUPPRESS_UNTIL_SPACE=0
+    fi
     CUE_SELECTED_INDEX=0
     CUE_SELECTED_VALUE=''
     CUE_SELECTED_REPLACEMENT=''
@@ -371,13 +380,19 @@ _cue_live_watch() {
   CUE_LIVE_LAST_BUFFER="$BUFFER"
   CUE_LIVE_LAST_CURSOR="$CURSOR"
 
+  if [[ -n "$CUE_DISMISSED_BUFFER" && "$BUFFER" == "$CUE_DISMISSED_BUFFER" ]]; then
+    _cue_send_hide
+    return
+  fi
+
   [[ -S "$CUE_SOCKET" ]] || return
   local line="$LBUFFER"
   if (( CUE_SUPPRESS_UNTIL_SPACE )); then
     if (( CURSOR == ${#BUFFER} )) && [[ "$BUFFER" == *[[:space:]] ]]; then
       CUE_SUPPRESS_UNTIL_SPACE=0
     else
-      line=''
+      _cue_send_hide
+      return
     fi
   fi
   if [[ -n "$line" ]]; then
@@ -396,6 +411,8 @@ _cue_live_watch() {
   else
     CUE_CURSOR_ROW=0
     CUE_CURSOR_COLUMN=0
+    _cue_send_hide
+    return
   fi
   _cue_send_packet "$action" "$line" 1
 }
@@ -407,6 +424,7 @@ _cue_measure_prompt() {
   CUE_ENV_B64="$(/usr/bin/env -0 | /usr/bin/base64 | tr -d '\n')"
   CUE_CURSOR_ROW=0
   CUE_CURSOR_COLUMN=0
+  CUE_SUPPRESS_UNTIL_SPACE=0
 }
 _cue_measure_prompt
 

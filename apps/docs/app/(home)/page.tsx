@@ -62,7 +62,9 @@ export default function HomePage() {
           </div>
 
           <div className="home-footer-bottom">
-            <span>© 2026 8StarLabs. All rights reserved.</span>
+            <a className="footer-license" href="https://github.com/8starlabs/cue/blob/main/LICENSE">
+              MIT License
+            </a>
             <nav className="footer-meta-links" aria-label="Machine-readable resources">
               <Link href="/sitemap.xml">XML sitemap</Link>
               <Link href="/llms.txt">llms.txt</Link>

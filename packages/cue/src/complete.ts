@@ -720,11 +720,10 @@ async function completeDirectories(partial: string, cwd: string): Promise<Comple
   }
 
   const suggestions: Completion[] = [];
-  // Keep parent navigation at the top while browsing any directory level. The
-  // `cd` completion path exits above once a completed path is followed by a
-  // space, so this row cannot leak into the next argument.
-  const parentWasRequested =
-    directoryPrefix.length === 0 || namePrefix.length === 0 || namePrefix.startsWith(".");
+  // Offer parent navigation at the initial `cd ` prompt, and keep it available
+  // while the user is following a path that began with `../`. After entering a
+  // normal suggested folder, don't inject a parent row into the next list.
+  const parentWasRequested = partial.length === 0 || partial === ".." || partial.startsWith("../");
   if (
     parentWasRequested &&
     target !== path.parse(target).root &&
@@ -931,6 +930,11 @@ export async function complete(
   if (parsed.redirect || parsed.command === "__cue_filepath__")
     return completeCodePaths(parsed.partial, cwd);
   const commandName = path.basename(parsed.command);
+  if (parsed.words.length === 0 && parsed.partial.length === 0 && !/\s$/.test(line)) {
+    // The command token is complete, but the user has not started its next
+    // argument. This also covers special path commands such as `cd`/`code`.
+    return [];
+  }
   if (commandName === "cd") {
     // `cd` takes one path. Once a path has been completed and the user types
     // a space, there is no next argument to suggest (especially after `..`).
@@ -973,12 +977,18 @@ export async function complete(
     ),
   );
   const children = spec.subcommands ?? [];
-  const isRootCommand = spec === root;
-  const isBareCommand =
-    isRootCommand && remaining.length === 0 && parsed.partial.length === 0 && !/\s$/.test(line);
-  const argumentContext = isBareCommand
-    ? { argument: undefined, partial: parsed.partial, insertPrefix: "", positionalEntries: [] }
-    : activeArgument(effectiveSpec, remaining, parsed.partial);
+  if (!/\s$/.test(line) && list(children).some(({ name }) => name === parsed.partial)) {
+    // The current token exactly names a subcommand. Wait for its trailing
+    // space before replacing it with the next token's suggestions.
+    return [];
+  }
+  const isBareCommand = remaining.length === 0 && parsed.partial.length === 0 && !/\s$/.test(line);
+  // A completed command with no trailing space is still the command itself.
+  // Wait until the user types a space before offering its next token, so
+  // accepting a suggestion cannot replace the command (for example, `clear`
+  // or `ls`).
+  if (isBareCommand) return [];
+  const argumentContext = activeArgument(effectiveSpec, remaining, parsed.partial);
   const argument = argumentContext.argument;
   const argumentPartial = argumentContext.partial;
 
@@ -1197,6 +1207,14 @@ export async function complete(
     argumentContext.positionalEntries.length === 0 &&
     (argumentPartial === "" || argumentPartial === ".");
   if (suggestsCurrentDirectoryByDefault) {
+    // Filepath templates can produce their own `.` completion. Keep the
+    // explicit current-directory row as the single, descriptive option.
+    for (let index = argumentSuggestions.length - 1; index >= 0; index -= 1) {
+      const suggestion = argumentSuggestions[index];
+      if (suggestion?.name === "." && suggestion.insertValue === ".") {
+        argumentSuggestions.splice(index, 1);
+      }
+    }
     argumentSuggestions.unshift({
       name: ".",
       description: currentDirectoryDescription,
