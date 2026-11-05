@@ -20,6 +20,8 @@ Run the documentation site locally from the repository root:
 pnpm dev:docs
 ```
 
+The docs site loads Google Tag Manager when `NEXT_PUBLIC_GTM_ID` is set. Copy `apps/docs/.env.example` to `apps/docs/.env.local` for local development. This is a public container ID, not a secret. For production builds, set the same variable in the hosting provider's build environment; `.env.local` is ignored by Git.
+
 ## Develop alongside the Homebrew install
 
 You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue currently supports one running instance at a time because both builds use the same process name and socket. When run from Apple Terminal, the build script stops the running Cue process and opens the local build. When run from VS Code, it builds the app but does not relaunch it; quit the running Cue app and start a new integrated zsh terminal to use the rebuilt version.
