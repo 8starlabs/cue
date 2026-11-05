@@ -1,0 +1,6 @@
+{
+  "title": "Contribute",
+  "defaultOpen": false,
+  "collapsible": true,
+  "pages": ["[Build from source](/docs/getting-started)", "[Prepare a release](/docs/releasing)"]
+}

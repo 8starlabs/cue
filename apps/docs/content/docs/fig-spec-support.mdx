@@ -1,30 +1,28 @@
 ---
-title: Fig spec support
-description: Which Fig autocomplete spec features Cue can run today.
+title: Fig autocomplete specs
+description: Supported Fig spec features and runtime limits.
 ---
 
-Cue bundles the official [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) catalog (version `2.692.3`) and interprets its declarative specs in a native macOS popup. The supported schema types come from [`@withfig/autocomplete-types`](https://www.npmjs.com/package/@withfig/autocomplete-types). The spec supplies command names, descriptions, argument hints, and generator behavior; Cue supplies the parser and popup runtime.
+Cue bundles [`@withfig/autocomplete`](https://github.com/withfig/autocomplete) specs and uses the schema from [`@withfig/autocomplete-types`](https://www.npmjs.com/package/@withfig/autocomplete-types). Specs provide suggestions; Cue provides parsing and the native popup.
 
 ## Works in Cue
 
-- Nested commands, aliases, descriptions, argument hints, priorities, hidden/deprecated suggestions, custom display names, and additional suggestions.
-- Option arguments, persistent options, repeat limits, dependencies, exclusions, `--` end-of-options handling, short option groups, and required option separators.
-- Static and variadic arguments, current-token suggestions, fuzzy filtering, file/folder/history/help templates, and option or argument aliases.
-- Script and custom generators with environment access, command execution, output splitting, post-processing, triggers, query terms, template filters, and cache time-to-live behavior.
-- Generated specs, lazy `loadSpec` entries, local specs in `.fig/autocomplete/build`, module specs in `~/.fig/autocomplete`, and versioned specs from the bundled catalog.
-- Fig suggestion icons: bundled Fig icons, file/folder and system icons, emoji, remote image URLs, colored badges, and template badges. `insertValue` and `replaceValue` support cursor markers, newlines, and backspaces.
-- Live filtering, arrow-key navigation through longer lists, and a description that can appear in a separate right-side card or below the list (`⌘I`).
+- Nested commands, aliases, descriptions, priorities, options, argument hints, and suggestions.
+- Static and variadic arguments, option rules, templates, fuzzy filtering, and file/folder completion.
+- Script and custom generators, including filters, triggers, output processing, and cache settings.
+- Generated and local specs, plus bundled Fig, system, emoji, and badge icons.
+- `insertValue` and `replaceValue`, live filtering, arrow-key navigation, and flexible descriptions.
 
-Generator commands run locally in the current directory and inherit the current Terminal environment. Cue invokes executables with argument arrays; it does not evaluate generator commands through an implicit shell. A spec that explicitly starts `sh -c` or `bash -c` still runs that command because the spec requested it.
+Generators run locally in the current directory with the Terminal environment. Cue executes commands without an implicit shell; specs can explicitly request one.
 
 ## Not the Fig desktop runtime
 
-Some Fig features depend on Fig’s own app or shell integration and do not transfer directly to Cue:
+Cue does not include Fig’s desktop runtime or other shell integrations:
 
 - Fig React `previewComponent` previews and other app-specific UI components.
 - Fig’s `Arg.debounce` scheduling and live refresh after an asynchronous generator finishes.
 - Remote or SSH-aware completion execution; Cue currently runs generators on the Mac and supplies an empty SSH prefix.
-- Fig’s complete shell parser and its Bash, Fish, and other terminal integrations. Cue targets zsh in Apple Terminal, with support for common pipes, separators, redirections, and quoted tokens.
+- Fig’s complete shell parser and its Bash, Fish, and other terminal integrations. Cue targets zsh in Apple Terminal and the VS Code integrated terminal, with support for common pipes, separators, redirections, and quoted tokens.
 - Fig’s selection history and recency-based ranking. Cue honors spec priorities but does not learn ranking from past selections.
 
-These limits do not stop ordinary Fig command specs from working, but a spec that relies on one of these features can behave differently. We’ll extend the compatibility guide as Cue’s runtime grows.
+Specs that rely on these features may behave differently. Cue currently supports zsh in Apple Terminal and the VS Code integrated terminal.

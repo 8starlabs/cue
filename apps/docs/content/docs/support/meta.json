@@ -1,0 +1,6 @@
+{
+  "title": "Support",
+  "defaultOpen": false,
+  "collapsible": true,
+  "pages": ["[Troubleshooting](/docs/troubleshooting)"]
+}

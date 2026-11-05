@@ -1,0 +1,6 @@
+{
+  "title": "Use Cue",
+  "defaultOpen": false,
+  "collapsible": true,
+  "pages": ["[Keyboard controls](/docs/keyboard-controls)", "[Suggestions](/docs/completions)"]
+}

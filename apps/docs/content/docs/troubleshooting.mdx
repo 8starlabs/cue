@@ -1,17 +1,17 @@
 ---
 title: Troubleshooting
-description: Fix the usual setup and popup issues.
+description: Fix setup, popup, and completion issues.
 ---
 
 ## No suggestions appear
 
-1. Confirm you are using zsh in Apple Terminal.
+1. Confirm you are using zsh in Apple Terminal or the VS Code integrated terminal.
 2. From the repository root, run `pnpm build:app` and wait for the build to finish.
 3. Load the integration again with `source "$PWD/packages/cue/zsh/cue.zsh"`.
 4. Check that `packages/cue/dist/cli.js` exists and that Node.js is available in your shell.
 5. Check **System Settings → Privacy & Security → Accessibility** and allow Cue if macOS requested access.
 
-Try `git ch` or `cd ` at a fresh prompt; suggestions appear as you type. Sourcing the integration launches the built app. If Cue was rebuilt from outside Apple Terminal, restart Cue so it loads the new app bundle.
+Try `git ch` or `cd ` at a fresh prompt; suggestions appear as you type. Sourcing the integration launches the built app. If Cue was rebuilt from outside a terminal, restart Cue so it loads the new app bundle.
 
 ## The popup stays after a suggestion disappears
 
@@ -19,7 +19,7 @@ Cue hides the popup when the latest completion result is empty. If the old panel
 
 ## The popup is in the wrong place
 
-Cue anchors the popup to Terminal’s live caret and converts coordinates for the monitor containing the Terminal window. It uses Accessibility geometry as a fallback. Verify Cue remains enabled under Accessibility. If the position is still wrong, include a screenshot, macOS display scaling, and your monitor arrangement when reporting it.
+Cue anchors the popup to Apple Terminal’s live caret. In VS Code, it combines the zsh cursor position with the integrated terminal viewport. Verify Cue remains enabled under **System Settings → Privacy & Security → Accessibility** and that the integrated terminal is focused. If the position is still wrong, include a screenshot, macOS display scaling, and your monitor arrangement when reporting it.
 
 ## Tab prints text into the terminal
 

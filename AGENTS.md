@@ -1,6 +1,6 @@
 # Repository guide
 
-Cue is an 8StarLabs project for IDE-style autocomplete in Apple Terminal. This repository is a pnpm monorepo.
+Cue is an 8StarLabs project for IDE-style autocomplete in Apple Terminal and the VS Code integrated terminal. This repository is a pnpm monorepo.
 
 ## Workspace map
 
@@ -21,8 +21,8 @@ Run commands from the repository root with pnpm:
 
 ## Product constraints
 
-- Cue currently targets macOS, Apple Terminal, and zsh.
-- Keep the native popup non-activating so Terminal retains keyboard focus.
+- Cue currently targets Apple Silicon Macs running macOS 13 or later, using zsh in Apple Terminal or the VS Code integrated terminal.
+- Keep the native popup non-activating so the terminal retains keyboard focus.
 - The shell bridge and native socket packet fields must stay in sync.
 - Directory completion for `cd` must stay directory-only. Do not show stale popup rows when the current query has no results.
 - Enter, Tab, Escape, and arrow-key behavior is implemented in `packages/cue/zsh/cue.zsh`; preserve the documented flow when changing it.

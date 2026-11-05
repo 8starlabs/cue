@@ -126,6 +126,37 @@ describe("Fig-style completion specs", () => {
     expect(laterPath.some(({ name, kind }) => name === "." && kind === "enter")).toBe(false);
   });
 
+  it("completes files and folders inside a partially typed path for file-taking commands", async () => {
+    await mkdir(path.join(workspace, "app", "src"), { recursive: true });
+    await writeFile(path.join(workspace, "app", "package-lock.yaml"), "lockfile\n");
+    await writeFile(path.join(workspace, "app", "src", "index.ts"), "export {}\n");
+
+    const rmSpec: FigSpec = {
+      name: "rm",
+      args: { isVariadic: true, template: ["folders", "filepaths"] },
+    };
+
+    const contents = await complete("rm app/", workspace, rmSpec);
+    expect(contents.map(({ name }) => name)).toEqual(["src/", "package-lock.yaml"]);
+    expect(contents.find(({ name }) => name === "package-lock.yaml")).toMatchObject({
+      typedPrefix: "",
+      insertValue: "app/package-lock.yaml",
+    });
+
+    const matchingFiles = await complete("rm app/p", workspace, rmSpec);
+    expect(matchingFiles.map(({ name }) => name)).toEqual(["package-lock.yaml"]);
+    expect(matchingFiles[0]).toMatchObject({
+      typedPrefix: "p",
+      insertValue: "app/package-lock.yaml",
+    });
+
+    for (const command of ["rm", "cat", "cp", "mv", "open"]) {
+      const commandSpec: FigSpec = { ...rmSpec, name: command };
+      const commandSuggestions = await complete(`${command} app/`, workspace, commandSpec);
+      expect(commandSuggestions.map(({ name }) => name)).toEqual(["src/", "package-lock.yaml"]);
+    }
+  });
+
   it("keeps parent navigation available after each ../ path segment", async () => {
     await expect(complete("cd", workspace)).resolves.toEqual([]);
     expect((await complete("cd ", workspace)).map(({ name }) => name)).toContain("../");

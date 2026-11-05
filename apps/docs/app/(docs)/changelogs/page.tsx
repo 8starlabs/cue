@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
+import { DocsPage } from "fumadocs-ui/layouts/docs/page";
 import { changelogSource } from "@/lib/source";
 
 export const metadata: Metadata = {
@@ -35,7 +36,13 @@ export default function ChangelogPage() {
     );
 
   return (
-    <main className="changelog-page">
+    <DocsPage
+      className="changelog-page"
+      breadcrumb={{ enabled: false }}
+      tableOfContent={{ enabled: false }}
+      tableOfContentPopover={{ enabled: false }}
+      footer={{ enabled: false }}
+    >
       <p className="changelog-kicker">Release notes</p>
       <h1>Changelog</h1>
       <p className="changelog-intro">
@@ -67,6 +74,6 @@ export default function ChangelogPage() {
           <p>Published Cue releases will appear here with their version, date, and changes.</p>
         </section>
       )}
-    </main>
+    </DocsPage>
   );
 }

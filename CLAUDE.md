@@ -1,6 +1,6 @@
 # Cue workspace notes
 
-Cue is a terminal autocomplete prototype from 8StarLabs. The repo is organized as a pnpm workspace:
+Cue is a macOS terminal autocomplete project from 8StarLabs. It supports zsh in Apple Terminal and the VS Code integrated terminal. The repo is organized as a pnpm workspace:
 
 ```text
 apps/docs       Next.js + Fumadocs docs site

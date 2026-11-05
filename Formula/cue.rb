@@ -1,5 +1,5 @@
 class Cue < Formula
-  desc "IDE-style command suggestions for Apple Terminal"
+  desc "IDE-style suggestions for Apple Terminal and VS Code"
   homepage "https://github.com/8starlabs/cue"
   url "https://github.com/8starlabs/cue/releases/download/v0.1.0/cue-0.1.0-macos-arm64.tar.gz"
   version "0.1.0"
@@ -24,7 +24,8 @@ class Cue < Formula
 
         source "#{opt_prefix}/share/cue/zsh/cue.zsh"
 
-      Open a new Apple Terminal window after saving the file.
+      Open a new zsh session in Apple Terminal or the VS Code integrated terminal.
+      In VS Code, choose zsh with Terminal: Select Default Profile if needed.
     EOS
   end
 end

@@ -1,19 +1,25 @@
 ---
 title: Keyboard controls
-description: Work through Cue suggestions without leaving the prompt.
+description: Navigate and accept suggestions from the prompt.
 ---
 
-Cue opens suggestions as you type and keeps the shell buffer as the source of truth. The popup follows the live caret, supports long lists, and disappears when Terminal loses focus, its window moves, or you press Escape.
+import { KeyboardActionShowcase } from "@/components/terminal-showcase";
 
-| Key       | Action                                                                                                                                                |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `↑` / `↓` | Move through suggestions. The list scrolls to reveal more rows when the selection reaches an edge.                                                    |
-| `Enter`   | Insert the highlighted suggestion. Press Enter again to run the completed command. For `cd`, Enter first dismisses the next-level folder suggestions. |
-| `Space`   | Start the next command argument and refresh its suggestions.                                                                                          |
-| `Tab`     | Insert the highlighted suggestion without printing zsh’s raw completion list or running the command.                                                  |
-| `Esc`     | Close suggestions for the current input. Editing the input starts suggestions again.                                                                  |
-| `⌘I`      | Toggle the description between a separate card on the right and a row below the suggestions.                                                          |
+Suggestions appear as you type. Cue keeps keyboard focus in your terminal and hides the popup when the terminal loses focus or you press Escape.
 
-For example, type `cd ` and accept a folder with Tab or Enter. Cue shows that folder’s contents; Enter dismisses those suggestions, and another Enter changes directories. The parent folder suggestion `../` is available once per path level, so accepting it does not create an endless chain of `../` suggestions.
+| Key       | Action                                                                |
+| --------- | --------------------------------------------------------------------- |
+| `↑` / `↓` | Move through the list.                                                |
+| `Enter`   | Insert the selected suggestion. Press Enter again to run the command. |
+| `Space`   | Begin the next argument.                                              |
+| `Tab`     | Insert the selected suggestion.                                       |
+| `Esc`     | Dismiss suggestions until the input changes.                          |
+| `⌘I`      | Move the description beside the list or below it.                     |
 
-Cue only edits the prompt. Review the completed command before pressing Enter to run it.
+For `cd`, accept a folder to browse its contents, then press Enter again to change into it. Cue offers one `../` entry per parent level.
+
+## See each key in action
+
+Each terminal below demonstrates one keyboard action. Suggestions only edit the prompt; review the command before running it.
+
+<KeyboardActionShowcase />

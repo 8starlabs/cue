@@ -1,28 +1,24 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { CommandDemo } from "@/components/command-demo";
-import { CueMark } from "@/components/cue-mark";
 import { InstallCommand } from "@/components/install-command";
+import { AskAiFooter } from "@/components/ask-ai-footer";
 
 export default function HomePage() {
   return (
     <main className="cue-home flex-1">
       <section className="hero-shell">
         <div className="hero-copy">
-          <div className="hero-brand">
-            <CueMark className="h-8 w-8" />
-            <span>Cue</span>
-          </div>
           <h1>
-            Autocomplete,
+            IDE-style
             <br />
-            back where it
+            autocomplete
             <br />
-            <span className="headline-mark">belongs.</span>
+            for <span className="headline-mark">Terminal.</span>
           </h1>
           <p className="hero-description">
-            Fig-inspired suggestions for Apple Terminal. See commands, options, and paths as you
-            type.
+            Free and open source. Commands, options, and file paths appear as you type in Apple
+            Terminal—no Tab required.
           </p>
           <div className="hero-actions">
             <InstallCommand />
@@ -31,10 +27,14 @@ export default function HomePage() {
             </Link>
           </div>
           <ul className="hero-features" aria-label="Cue features">
-            <li>Git completions</li>
-            <li>Files and folders</li>
-            <li>Fig autocomplete specs</li>
-            <li>Apple Terminal · zsh</li>
+            <li>Git commands and branch names</li>
+            <li>Command, option, and argument suggestions</li>
+            <li>Files and folders as you type</li>
+            <li>Open-source Fig command specs</li>
+            <li>File-type icons and contextual descriptions</li>
+            <li>Arrow-key navigation</li>
+            <li>Enter or Tab to insert · Esc to dismiss</li>
+            <li>Apple Terminal · VS Code · zsh</li>
           </ul>
         </div>
         <div className="hero-art" aria-label="Cue command suggestion preview">
@@ -44,33 +44,12 @@ export default function HomePage() {
 
       <footer className="home-footer">
         <div className="home-footer-inner">
-          <div className="home-footer-main">
-            <div className="home-footer-about">
-              <Link href="/" className="footer-brand" aria-label="Cue home">
-                <CueMark className="h-7 w-7" />
-                <span>Cue</span>
-              </Link>
-              <p>Autocomplete for Apple Terminal.</p>
-            </div>
-
-            <nav className="footer-links" aria-label="Footer links">
-              <Link href="/docs">Docs</Link>
-              <Link href="/changelogs">Changelog</Link>
-              <a href="https://github.com/8starlabs/cue">GitHub</a>
-              <a href="https://github.com/8starlabs/cue/blob/main/CONTRIBUTION.md">Contributing</a>
-            </nav>
-          </div>
-
-          <div className="home-footer-bottom">
-            <a className="footer-license" href="https://github.com/8starlabs/cue/blob/main/LICENSE">
-              MIT License
-            </a>
-            <nav className="footer-meta-links" aria-label="Machine-readable resources">
-              <Link href="/sitemap.xml">XML sitemap</Link>
-              <Link href="/llms.txt">llms.txt</Link>
-              <Link href="/llms-full.txt">llms-full.txt</Link>
-            </nav>
-          </div>
+          <p className="footer-copy">
+            Engineered by <a href="https://8starlabs.com">8StarLabs</a>. The source code is
+            available on <a href="https://github.com/8starlabs/cue">GitHub</a>. For AI models and
+            bots, see <Link href="/llms.txt">llms.txt</Link>.
+          </p>
+          <AskAiFooter />
         </div>
       </footer>
     </main>

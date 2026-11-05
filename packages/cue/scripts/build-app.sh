@@ -10,6 +10,7 @@ swift build --package-path "$ROOT/native" -c release
 APP="$ROOT/build/Cue.app"
 RUNTIME="$APP/Contents/Resources/CueRuntime"
 VERSION="$(node -p "require('$ROOT/package.json').version")"
+BUNDLE_ID="dev.cue.terminal-suggestions"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/native/.build/release/Cue" "$APP/Contents/MacOS/Cue"
@@ -27,7 +28,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>CFBundleExecutable</key><string>Cue</string>
-  <key>CFBundleIdentifier</key><string>dev.cue.terminal-suggestions</string>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundleName</key><string>Cue</string>
   <key>CFBundleDisplayName</key><string>Cue</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -38,7 +39,20 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --deep --sign - "$APP"
+if [[ -n "${CUE_CODESIGN_IDENTITY:-}" ]]; then
+  codesign --force --deep --options runtime --timestamp \
+    --sign "$CUE_CODESIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
+elif [[ "${CUE_RELEASE_BUILD:-0}" == "1" ]]; then
+  echo "A stable Developer ID signature is required for release builds." >&2
+  echo "Set CUE_CODESIGN_IDENTITY to your Developer ID Application identity." >&2
+  exit 1
+else
+  # Keep a stable designated requirement across ad hoc development builds.
+  # This lets macOS identify successive local builds as the same Accessibility
+  # client instead of tying trust to each build's changing cdhash.
+  codesign --force --deep --sign - --identifier "$BUNDLE_ID" \
+    --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP"
+fi
 
 # When building interactively from Apple Terminal, replace the running app so
 # the next completion uses this build. Keep non-interactive/package builds free

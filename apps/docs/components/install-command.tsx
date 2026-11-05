@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 
-const installCommand = "brew install 8starlabs/cue/cue";
+const installCommands = [
+  "brew tap 8starlabs/cue https://github.com/8starlabs/cue.git",
+  "brew install 8starlabs/cue/cue",
+] as const;
+const installCommand = installCommands.join("\n");
 
 type CopyState = "idle" | "copied" | "error";
 
@@ -43,10 +47,16 @@ export function InstallCommand() {
       aria-label={`${actionLabel}: ${installCommand}`}
     >
       <span className="install-command-code">
-        <span className="install-command-prompt" aria-hidden="true">
-          $
-        </span>
-        <code>{installCommand}</code>
+        <code>
+          {installCommands.map((command) => (
+            <span className="install-command-line" key={command}>
+              <span className="install-command-prompt" aria-hidden="true">
+                $
+              </span>
+              <span className="install-command-text">{command}</span>
+            </span>
+          ))}
+        </code>
       </span>
       <span className="install-command-action" aria-hidden="true">
         <ActionIcon size={14} />
@@ -54,7 +64,7 @@ export function InstallCommand() {
       </span>
       <span className="sr-only" role="status" aria-live="polite">
         {copyState === "copied"
-          ? "Homebrew command copied"
+          ? "Homebrew commands copied"
           : copyState === "error"
             ? "Unable to copy command"
             : ""}

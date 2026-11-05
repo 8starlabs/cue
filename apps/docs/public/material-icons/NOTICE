@@ -1,0 +1,7 @@
+Material Icon Theme file icons
+Copyright (c) 2025 Material Extensions
+
+Source: https://github.com/material-extensions/vscode-material-icon-theme
+License: MIT. See LICENSE in this directory.
+
+Cue bundles selected upstream SVG icons for common file types and uses document.svg as the fallback for file suggestions without a matching icon.

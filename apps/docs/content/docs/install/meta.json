@@ -1,0 +1,6 @@
+{
+  "title": "Install",
+  "defaultOpen": false,
+  "collapsible": true,
+  "pages": ["install-cue", "update", "uninstall"]
+}

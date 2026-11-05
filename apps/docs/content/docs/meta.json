@@ -1,13 +1,17 @@
 {
-  "title": "Cue guides",
+  "title": "Documentation",
   "pages": [
-    "index",
-    "getting-started",
-    "homebrew",
-    "keyboard-controls",
-    "completions",
-    "fig-spec-support",
-    "troubleshooting",
-    "releasing"
+    "!index",
+    "install",
+    "use-cue",
+    "reference",
+    "support",
+    "contribute",
+    "!keyboard-controls",
+    "!completions",
+    "!fig-spec-support",
+    "!troubleshooting",
+    "!getting-started",
+    "!releasing"
   ]
 }

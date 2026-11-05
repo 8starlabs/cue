@@ -1,31 +1,55 @@
 ---
-title: Cue guides
-description: Get Cue running and learn how suggestions behave in Apple Terminal.
+title: Documentation
+description: Install Cue, use inline completions, and learn how suggestions work.
 ---
 
-Cue shows command and path suggestions as you type in Apple Terminal. The popup follows the caret, shows descriptions for the selected row, and stays out of the way when Terminal loses focus. Start with setup, then learn the keyboard controls and how command specs power suggestions.
+Cue brings IDE-style command, option, and path completions to Apple Terminal and the VS Code integrated terminal on macOS. Both use Cue's zsh integration. Homebrew is the recommended way to install it.
 
-<Cards>
-  <Card
-    title="Get started"
-    href="/docs/getting-started"
-    description="Build Cue and load the zsh integration."
-  />
-  <Card
-    title="Homebrew"
-    href="/docs/homebrew"
-    description="Install, update, or remove Cue with Homebrew."
-  />
+## Install Cue
+
+<Card
+  title="Install with Homebrew"
+  href="/docs/install/install-cue"
+  description="Recommended · Set up Cue in a few steps."
+/>
+
+<details className="cue-source-details">
+  <summary>Prefer to build from source?</summary>
+
+See [Build from source](/docs/getting-started) for the developer setup.
+
+</details>
+
+## Use Cue
+
+<Cards className="grid-cols-1 md:grid-cols-2">
   <Card
     title="Keyboard controls"
     href="/docs/keyboard-controls"
-    description="Navigate suggestions, switch the description layout, and accept commands."
+    description="Navigate, accept, and dismiss suggestions."
   />
   <Card
-    title="How suggestions work"
+    title="Suggestions"
     href="/docs/completions"
-    description="Learn where command and path suggestions come from."
+    description="See how Cue completes commands and paths."
   />
 </Cards>
 
-Cue currently targets macOS, Apple Terminal, and zsh. Its command definitions come from Fig's open-source autocomplete catalog; Cue supplies the shell integration and native popup. Install the published Homebrew formula from this repository, or build Cue from source.
+## Reference and help
+
+<Cards className="grid-cols-1 md:grid-cols-2">
+  <Card
+    title="Fig spec support"
+    href="/docs/fig-spec-support"
+    description="Supported fields and known limitations."
+  />
+  <Card
+    title="Troubleshooting"
+    href="/docs/troubleshooting"
+    description="Fix setup, popup, and completion issues."
+  />
+</Cards>
+
+## Contribute
+
+See [Prepare a release](/docs/releasing) for the maintainer release workflow.

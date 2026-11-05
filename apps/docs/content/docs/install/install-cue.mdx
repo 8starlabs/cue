@@ -1,0 +1,37 @@
+---
+title: Install Cue
+description: Install Cue with Homebrew and enable it in Apple Terminal or VS Code.
+---
+
+import { TerminalShowcase } from "@/components/terminal-showcase";
+
+Cue supports Apple Silicon Macs running macOS 13 or later. Its zsh integration works in Apple Terminal and the VS Code integrated terminal. Homebrew installs Cue and its Node.js dependency.
+
+## Install
+
+Run these commands in a terminal:
+
+```sh
+brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
+brew install 8starlabs/cue/cue
+```
+
+## Enable Cue in zsh
+
+Add Cue to your zsh startup file so it loads in every new zsh session:
+
+```sh
+echo 'source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"' >> ~/.zshrc
+```
+
+Then open a new Terminal window or create a new integrated terminal in VS Code. Existing shells do not load the change automatically. Homebrew also prints the `source` line after installation.
+
+If VS Code's integrated terminal is not using zsh, run **Terminal: Select Default Profile** from the Command Palette, choose **zsh**, and create a new terminal. Cue uses the same zsh integration there; it does not require a VS Code extension.
+
+If macOS asks for permission, allow Cue under **System Settings → Privacy & Security → Accessibility** so the popup can follow the caret.
+
+Type a command such as `git ch` to see suggestions:
+
+<TerminalShowcase />
+
+See [Update Cue](/docs/install/update) to install future releases, or [Uninstall Cue](/docs/install/uninstall) to remove it.

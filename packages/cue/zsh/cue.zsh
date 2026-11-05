@@ -10,7 +10,7 @@ fi
 
 # Escape is a prefix for arrow and Meta-key sequences in zsh. Keep the wait
 # short for quick dismissal, but long enough to recognize Option-Backspace.
-typeset -g KEYTIMEOUT=5
+typeset -g KEYTIMEOUT=8
 
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -g CUE_SELECTED_VALUE=''
@@ -25,6 +25,7 @@ typeset -g CUE_MATCHES_CURSOR=''
 typeset -gi CUE_MATCHES_CACHE_VALID=0
 typeset -gi CUE_CURSOR_ROW=0
 typeset -gi CUE_CURSOR_COLUMN=0
+typeset -gi CUE_FORCE_CURSOR_QUERY=0
 typeset -gi CUE_SUPPRESS_UNTIL_SPACE=0
 typeset -g CUE_DISMISSED_BUFFER=''
 typeset -g CUE_ACCEPTED_BUFFER=''
@@ -175,7 +176,7 @@ _cue_close_socket() {
 _cue_write_packet() {
   local action="$1" line="$2" include_environment="${3:-0}"
   if (( include_environment )); then
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s\0\0' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$CUE_ENV_B64" "$line" >&$CUE_SOCKET_FD 2>/dev/null
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s\0\0' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$CUE_ENV_B64" "${TTY:-}" "$line" >&$CUE_SOCKET_FD 2>/dev/null
   else
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\0%s\0\0' "$CURSOR" "$COLUMNS" "$LINES" "$CUE_PROMPT_WIDTH" "$CUE_CURSOR_ROW" "$CUE_CURSOR_COLUMN" "$PWD" "$action" "$line" >&$CUE_SOCKET_FD 2>/dev/null
   fi
@@ -195,17 +196,44 @@ _cue_send_packet() {
 _cue_dismiss_widget() {
   CUE_DISMISSED_BUFFER="$BUFFER"
   CUE_ENTER_DISMISS_BUFFER=''
+  CUE_ACCEPTED_BUFFER=''
+  CUE_SELECTED_INDEX=0
+  CUE_SELECTED_VALUE=''
+  CUE_SELECTED_REPLACEMENT=''
+  CUE_SELECTION_BUFFER=''
+  CUE_SELECTION_CURSOR=''
   _cue_send_hide
   zle -M ''
 }
 zle -N cue_dismiss_widget _cue_dismiss_widget
+
+_cue_backward_kill_word_widget() {
+  zle .backward-kill-word
+  CUE_SELECTED_INDEX=0
+  CUE_SELECTED_VALUE=''
+  CUE_SELECTED_REPLACEMENT=''
+  CUE_SELECTION_BUFFER=''
+  CUE_SELECTION_CURSOR=''
+  CUE_ACCEPTED_BUFFER=''
+  CUE_ENTER_DISMISS_BUFFER=''
+  CUE_SUPPRESS_UNTIL_SPACE=0
+  CUE_DISMISSED_BUFFER="$BUFFER"
+  CUE_CURSOR_ROW=0
+  CUE_CURSOR_COLUMN=0
+  CUE_FORCE_CURSOR_QUERY=1
+  _cue_send_hide
+  zle -M ''
+}
+zle -N cue_backward_kill_word_widget _cue_backward_kill_word_widget
 bindkey '^[' cue_dismiss_widget
 bindkey -M emacs '^[' cue_dismiss_widget
-bindkey -M emacs '^[^?' backward-kill-word
-bindkey -M emacs '^[^H' backward-kill-word
+bindkey -M emacs '^[^?' cue_backward_kill_word_widget
+bindkey -M emacs '^[^H' cue_backward_kill_word_widget
 bindkey -M viins '^[' cue_dismiss_widget
-bindkey -M viins '^[^?' backward-kill-word
-bindkey -M viins '^[^H' backward-kill-word
+bindkey -M viins '^[^?' cue_backward_kill_word_widget
+bindkey -M viins '^[^H' cue_backward_kill_word_widget
+bindkey '^[^?' cue_backward_kill_word_widget
+bindkey '^[^H' cue_backward_kill_word_widget
 
 _cue_move_selection() {
   local direction="$1"
@@ -308,6 +336,12 @@ _cue_complete_selection() {
     CUE_ACCEPTED_BUFFER="$BUFFER"
     CUE_ENTER_DISMISS_BUFFER=''
   fi
+  # An accepted completion may move Terminal's cursor by several cells or
+  # across a wrapped row. Re-measure on the next redraw instead of extending
+  # the old cached row/column across that edit.
+  CUE_CURSOR_ROW=0
+  CUE_CURSOR_COLUMN=0
+  CUE_FORCE_CURSOR_QUERY=1
   # Keep the popup live after a directory completion; hide other suggestions
   # until the next argument is started.
   if [[ "$BUFFER" == cd[[:space:]]* ]]; then
@@ -357,7 +391,7 @@ typeset -g CUE_ENV_B64=''
 typeset -g CUE_SOCKET="/tmp/cue-${UID}.sock"
 
 _cue_live_watch() {
-  if [[ "$BUFFER" == "$CUE_LIVE_LAST_BUFFER" && "$CURSOR" == "$CUE_LIVE_LAST_CURSOR" ]]; then
+  if [[ "$BUFFER" == "$CUE_LIVE_LAST_BUFFER" && "$CURSOR" == "$CUE_LIVE_LAST_CURSOR" ]] && (( ! CUE_FORCE_CURSOR_QUERY )); then
     return
   fi
   local old_buffer="$CUE_LIVE_LAST_BUFFER"
@@ -371,7 +405,7 @@ _cue_live_watch() {
     CUE_SELECTED_REPLACEMENT=''
     CUE_SELECTION_BUFFER=''
     CUE_SELECTION_CURSOR=''
-    CUE_DISMISSED_BUFFER=''
+    [[ "$BUFFER" == "$CUE_DISMISSED_BUFFER" ]] || CUE_DISMISSED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]] || CUE_ACCEPTED_BUFFER=''
     [[ "$BUFFER" == "$CUE_ENTER_DISMISS_BUFFER" ]] || CUE_ENTER_DISMISS_BUFFER=''
   fi
@@ -398,7 +432,7 @@ _cue_live_watch() {
   if [[ -n "$line" ]]; then
     local cursor_delta=$(( CURSOR - old_cursor ))
     local use_cached_position=0
-    if (( CUE_CURSOR_ROW > 0 && CUE_CURSOR_COLUMN > 0 )); then
+    if (( ! CUE_FORCE_CURSOR_QUERY && CUE_CURSOR_ROW > 0 && CUE_CURSOR_COLUMN > 0 )); then
       if [[ "$BUFFER" == "$old_buffer" ]] && (( cursor_delta >= -1 && cursor_delta <= 1 )); then
         use_cached_position=1
       elif [[ "$BUFFER" == "$old_buffer"* ]] && (( ${#BUFFER} == ${#old_buffer} + 1 )); then
@@ -408,9 +442,11 @@ _cue_live_watch() {
       fi
     fi
     _cue_query_terminal_cursor "$cursor_delta" "$use_cached_position"
+    CUE_FORCE_CURSOR_QUERY=0
   else
     CUE_CURSOR_ROW=0
     CUE_CURSOR_COLUMN=0
+    CUE_FORCE_CURSOR_QUERY=0
     _cue_send_hide
     return
   fi
@@ -424,6 +460,7 @@ _cue_measure_prompt() {
   CUE_ENV_B64="$(/usr/bin/env -0 | /usr/bin/base64 | tr -d '\n')"
   CUE_CURSOR_ROW=0
   CUE_CURSOR_COLUMN=0
+  CUE_FORCE_CURSOR_QUERY=0
   CUE_SUPPRESS_UNTIL_SPACE=0
 }
 _cue_measure_prompt

@@ -1,20 +1,17 @@
 ---
-title: Get started
-description: Build Cue and enable its zsh integration in Apple Terminal.
+title: Build from source
+description: Build Cue locally for development.
 ---
+
+Homebrew is the recommended installation. Use this guide if you want to build or change Cue itself.
 
 ## Requirements
 
-- macOS 13 or later
-- Apple Terminal
-- zsh
-- Node.js 22 or later
-- pnpm 10 or later
-- Xcode Command Line Tools, to build the Swift app
+You need macOS 13+, Apple Terminal or the VS Code integrated terminal running zsh, Node.js 22+, pnpm 10+, and Xcode Command Line Tools.
 
-## Install from source
+## Build Cue
 
-Clone the repository, then run these commands from its root:
+Run this from the repository root:
 
 ```sh
 git clone https://github.com/8starlabs/cue.git
@@ -23,35 +20,33 @@ pnpm install
 pnpm build:app
 ```
 
-This builds the completion engine and native app at `packages/cue/build/Cue.app`.
+The app is built at `packages/cue/build/Cue.app`.
 
-## Load the shell integration
+## Load it in zsh
 
-In the same Terminal window, run:
+Load the integration in the current Terminal session:
 
 ```sh
 source "$PWD/packages/cue/zsh/cue.zsh"
 ```
 
-Keep the terminal working directory at the repository root when running this command. To load Cue automatically in future zsh sessions, add an absolute source path to `~/.zshrc`:
+To load Cue in future sessions in either terminal, add an absolute path to `~/.zshrc`:
 
 ```sh
 source "/path/to/cue/packages/cue/zsh/cue.zsh"
 ```
 
-Replace `/path/to/cue` with the absolute path to your clone. Restart Terminal or run `source ~/.zshrc` to apply it. Sourcing the integration also launches Cue in the background.
+Replace `/path/to/cue` with your clone's path. Start a new Terminal session to apply it. The integration launches Cue in the background.
 
-## Grant Accessibility access
+In VS Code, open a new integrated terminal after saving `~/.zshrc`. If its shell is not zsh, run **Terminal: Select Default Profile**, choose **zsh**, and create a new terminal. Cue uses the same shell bridge in both apps; no VS Code extension is required.
 
-macOS may ask to let Cue control your computer. Allow Cue under **System Settings → Privacy & Security → Accessibility**. Cue uses this access to read Terminal window geometry and place the suggestion popup near the caret; it does not take keyboard focus away from Terminal.
+## Allow popup positioning
 
-## Try a few commands
+If macOS asks, allow Cue under **System Settings → Privacy & Security → Accessibility**. Cue uses this access to position suggestions near the caret.
 
-Type `git ch`, `cd `, `code `, or `rm ` and wait for the suggestion panel; you do not need to press Tab to make it appear. `git ch` shows matching Git subcommands. `cd ` shows folders in the current directory, and accepting a folder shows its next level. `code ` and file-taking commands such as `rm ` can show matching files and folders. Continue typing to narrow the list.
+## Update or remove
 
-## Update
-
-Pull the latest code and rebuild from the repository root:
+Pull and rebuild from the repository root:
 
 ```sh
 git pull --ff-only
@@ -59,23 +54,6 @@ pnpm install
 pnpm build:app
 ```
 
-When you build from Apple Terminal, the build replaces the running Cue app automatically. Open a new Terminal window after updating so zsh loads the latest integration; existing windows do not reload `~/.zshrc` automatically. If you build from another app, stop Cue first, then open a new Terminal window:
+Open a new Terminal session after rebuilding. If Cue is running, open Activity Monitor, select Cue, click the stop button, and choose **Quit** so the new session launches the updated app.
 
-```sh
-pkill -x Cue 2>/dev/null || true
-```
-
-## Remove
-
-First remove the Cue `source` line from `~/.zshrc`, then stop the background app and clear its temporary socket files:
-
-```sh
-pkill -x Cue 2>/dev/null || true
-rm -f "/tmp/cue-$(id -u).sock" "/tmp/cue-$(id -u).sock.cache"
-```
-
-Close existing Terminal windows to unload the shell integration. Then delete the repository folder from Finder or remove your clone's folder from another directory. You can also remove Cue from **System Settings → Privacy & Security → Accessibility**. Keep Node.js and Xcode Command Line Tools if other projects use them.
-
-## Homebrew
-
-Prefer Homebrew? See the [Homebrew guide](/docs/homebrew) for installation, upgrades, and removal. The formula is maintained in this repository at `Formula/cue.rb`; no separate tap repository is needed.
+To uninstall, remove Cue's `source` line from `~/.zshrc`, quit Cue if it is running, close existing Terminal windows, and delete your clone. Cue cleans up its temporary socket files when it starts again. You can also remove Cue from Accessibility settings. See [Install Cue](/docs/install/install-cue) if you prefer the Homebrew version.

@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/components/mdx";
 import { changelogSource } from "@/lib/source";
+import { DocsPage } from "fumadocs-ui/layouts/docs/page";
 
 const dateFormat = new Intl.DateTimeFormat("en", {
   dateStyle: "long",
@@ -18,7 +19,13 @@ export default async function ChangelogEntryPage(props: PageProps<"/changelogs/[
   const MDX = page.data.body;
 
   return (
-    <main className="changelog-entry-page">
+    <DocsPage
+      className="changelog-entry-page"
+      breadcrumb={{ enabled: false }}
+      tableOfContent={{ enabled: false }}
+      tableOfContentPopover={{ enabled: false }}
+      footer={{ enabled: false }}
+    >
       <Link className="changelog-back" href="/changelogs">
         <ArrowLeft size={15} aria-hidden="true" />
         All releases
@@ -38,7 +45,7 @@ export default async function ChangelogEntryPage(props: PageProps<"/changelogs/[
           <MDX components={getMDXComponents()} />
         </div>
       </article>
-    </main>
+    </DocsPage>
   );
 }
 

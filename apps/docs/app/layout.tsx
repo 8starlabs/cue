@@ -1,4 +1,6 @@
 import { RootProvider } from "fumadocs-ui/provider/next";
+import { CueSearchDialog } from "@/components/search-dialog";
+import { NavigationProgress } from "@/components/navigation-progress";
 import "./global.css";
 import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource-variable/hanken-grotesk";
@@ -9,43 +11,17 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://8starlabs.com"),
   title: {
     default: "Cue — terminal autocomplete by 8StarLabs",
-    template: "%s · Cue",
+    template: "%s — Cue",
   },
-  description: "IDE-style command suggestions for Apple Terminal.",
+  description: "IDE-style command suggestions for Apple Terminal and VS Code.",
 };
-
-function SearchFooter() {
-  return (
-    <div className="cue-search-footer" aria-label="Search keyboard shortcuts">
-      <span>
-        <kbd>↑</kbd>
-        <kbd>↓</kbd> Navigate
-      </span>
-      <span>
-        <kbd>↵</kbd> Open page
-      </span>
-      <span className="cue-search-close">
-        <kbd>Esc</kbd> Close
-      </span>
-    </div>
-  );
-}
 
 export default function Layout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        <RootProvider
-          search={{
-            links: [
-              ["Get started", "/docs/getting-started"],
-              ["Keyboard controls", "/docs/keyboard-controls"],
-              ["How suggestions work", "/docs/completions"],
-            ],
-            options: { footer: <SearchFooter /> },
-          }}
-        >
-          {children}
+        <RootProvider search={{ SearchDialog: CueSearchDialog }}>
+          <NavigationProgress>{children}</NavigationProgress>
         </RootProvider>
       </body>
     </html>

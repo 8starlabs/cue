@@ -1,6 +1,6 @@
 # Cue package
 
-This workspace package contains Cue's completion runtime, macOS popup app, and zsh bridge. The native app reads command specs from Fig's open `@withfig/autocomplete` catalog. It is currently designed for Apple Terminal on macOS.
+This workspace package contains Cue's completion runtime, macOS popup app, and zsh bridge. The native app reads command specs from Fig's open `@withfig/autocomplete` catalog. Cue supports Apple Terminal and the VS Code integrated terminal on macOS when they run zsh.
 
 Build from the repository root:
 

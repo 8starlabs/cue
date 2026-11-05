@@ -1,12 +1,12 @@
 # Cue
 
-![Cue in Apple Terminal](assets/social/cue-readme.png)
+![Cue terminal autocomplete](assets/social/cue-readme.png)
 
-IDE-style command and path suggestions for Apple Terminal.
+IDE-style command and path suggestions for Apple Terminal and the VS Code integrated terminal.
 
 Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquired its technology](https://techcrunch.com/2023/08/29/amazon-fig-command-line-terminal-generative-ai/), and built Cue after Kiro [announced the retirement of inline shell autocomplete](https://kiro.dev/blog/cli-3/).
 
-**Available on:** Apple Silicon Macs running macOS 13 or later, with Apple Terminal and zsh.
+**Available on:** Apple Silicon Macs running macOS 13 or later, in Apple Terminal or the VS Code integrated terminal with zsh.
 
 ## Install
 
@@ -17,7 +17,7 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
    brew install 8starlabs/cue/cue
    ```
 
-   Add the source command printed by Homebrew to `~/.zshrc`, then open a new Terminal window.
+   Add the source command printed by Homebrew to `~/.zshrc`, then open a new zsh session in Apple Terminal or VS Code. In VS Code, select zsh with **Terminal: Select Default Profile** if needed.
 
 2. **Build from source**
 

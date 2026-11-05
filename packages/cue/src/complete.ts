@@ -10,6 +10,7 @@ import { loadLocalSpec, loadModuleSpec, loadSpec, loadSpecLocation } from "./spe
 
 const execFileAsync = promisify(execFile);
 const MAX_SUGGESTIONS = 50;
+const FILESYSTEM_CHECK_BATCH_SIZE = 16;
 const DIRECTORY_CACHE_TTL_MS = 300;
 const currentDirectoryDefaults: Record<string, string> = {
   ls: "List the current directory",
@@ -126,6 +127,13 @@ function optionMatches(option: FigOption, word: string): boolean {
 
 function optionNames(option: FigOption): string[] {
   return Array.isArray(option.name) ? option.name : [option.name];
+}
+
+function hasAnyName(names: Set<string>, candidates: Set<string>): boolean {
+  for (const name of names) {
+    if (candidates.has(name)) return true;
+  }
+  return false;
 }
 
 function optionSeparators(spec: FigSpec): string[] {
@@ -741,29 +749,42 @@ async function completeDirectories(partial: string, cwd: string): Promise<Comple
     });
   }
 
-  for (const entry of entries) {
-    if (suggestions.length >= MAX_SUGGESTIONS) break;
-    if (entry.name.startsWith(".") && !namePrefix.startsWith(".")) continue;
-    if (!entry.name.toLowerCase().startsWith(namePrefix.toLowerCase())) continue;
-    let isDirectory = entry.isDirectory();
-    if (!isDirectory && entry.isSymbolicLink()) {
-      try {
-        isDirectory = (await stat(path.join(target, entry.name))).isDirectory();
-      } catch {
-        continue;
-      }
+  const candidates = entries.filter(
+    (entry) =>
+      (entry.isDirectory() || entry.isSymbolicLink()) &&
+      !(entry.name.startsWith(".") && !namePrefix.startsWith(".")) &&
+      entry.name.toLowerCase().startsWith(namePrefix.toLowerCase()),
+  );
+  for (
+    let offset = 0;
+    offset < candidates.length && suggestions.length < MAX_SUGGESTIONS;
+    offset += FILESYSTEM_CHECK_BATCH_SIZE
+  ) {
+    const batch = candidates.slice(offset, offset + FILESYSTEM_CHECK_BATCH_SIZE);
+    const resolved = await Promise.all(
+      batch.map(async (entry) => {
+        if (entry.isDirectory()) return true;
+        try {
+          return (await stat(path.join(target, entry.name))).isDirectory();
+        } catch {
+          return false;
+        }
+      }),
+    );
+    for (const [index, isDirectory] of resolved.entries()) {
+      if (!isDirectory) continue;
+      const entry = batch[index];
+      const name = `${entry.name}/`;
+      suggestions.push({
+        name,
+        description: "Folder",
+        typedPrefix: namePrefix,
+        insertValue: quotePath(`${directoryPrefix}${name}`),
+        icon: "fig://icon?type=folder",
+        kind: "argument",
+      });
+      if (suggestions.length >= MAX_SUGGESTIONS) break;
     }
-    if (!isDirectory) continue;
-
-    const name = `${entry.name}/`;
-    suggestions.push({
-      name,
-      description: "Folder",
-      typedPrefix: namePrefix,
-      insertValue: quotePath(`${directoryPrefix}${name}`),
-      icon: "fig://icon?type=folder",
-      kind: "argument",
-    });
   }
   return suggestions;
 }
@@ -791,27 +812,37 @@ async function completeCodePaths(partial: string, cwd: string): Promise<Completi
       kind: "argument",
     });
   }
-  for (const entry of entries) {
-    if (entry.name.startsWith(".") && !namePrefix.startsWith(".")) continue;
-    if (!entry.name.toLowerCase().startsWith(namePrefix.toLowerCase())) continue;
-
-    let isDirectory = entry.isDirectory();
-    if (!isDirectory && entry.isSymbolicLink()) {
-      try {
-        isDirectory = (await stat(path.join(target, entry.name))).isDirectory();
-      } catch {
-        // Keep broken symlinks available as file paths for tools that handle them.
-      }
+  const candidates = entries.filter(
+    (entry) =>
+      !(entry.name.startsWith(".") && !namePrefix.startsWith(".")) &&
+      entry.name.toLowerCase().startsWith(namePrefix.toLowerCase()),
+  );
+  for (let offset = 0; offset < candidates.length; offset += FILESYSTEM_CHECK_BATCH_SIZE) {
+    const batch = candidates.slice(offset, offset + FILESYSTEM_CHECK_BATCH_SIZE);
+    const directories = await Promise.all(
+      batch.map(async (entry) => {
+        if (entry.isDirectory()) return true;
+        if (!entry.isSymbolicLink()) return false;
+        try {
+          return (await stat(path.join(target, entry.name))).isDirectory();
+        } catch {
+          // Keep broken symlinks available as file paths for tools that handle them.
+          return false;
+        }
+      }),
+    );
+    for (const [index, isDirectory] of directories.entries()) {
+      const entry = batch[index];
+      const name = `${entry.name}${isDirectory ? "/" : ""}`;
+      suggestions.push({
+        name,
+        description: isDirectory ? "Folder" : "File",
+        typedPrefix: namePrefix,
+        insertValue: quotePath(`${directoryPrefix}${name}`),
+        icon: isDirectory ? "fig://icon?type=folder" : undefined,
+        kind: "argument",
+      });
     }
-    const name = `${entry.name}${isDirectory ? "/" : ""}`;
-    suggestions.push({
-      name,
-      description: isDirectory ? "Folder" : "File",
-      typedPrefix: namePrefix,
-      insertValue: quotePath(`${directoryPrefix}${name}`),
-      icon: isDirectory ? "fig://icon?type=folder" : undefined,
-      kind: "argument",
-    });
   }
   return suggestions
     .sort(
@@ -850,6 +881,7 @@ function visible(
   partial: string,
   kind: Completion["kind"],
   strategy: Fig.Arg["filterStrategy"] | Fig.Subcommand["filterStrategy"] = "default",
+  typedPrefix = partial,
 ): Completion[] {
   const normalized: Array<FigSuggestion & { name: string }> = suggestions.flatMap((item) => {
     const names = typeof item.name === "string" ? [item.name] : (item.name ?? []);
@@ -902,7 +934,7 @@ function visible(
         displayName: deprecatedDetails?.displayName ?? item.displayName,
         description: deprecatedDetails?.description ?? item.description,
         argumentHint,
-        typedPrefix: partial,
+        typedPrefix,
         insertValue,
         replaceValue: deprecatedDetails?.replaceValue ?? item.replaceValue,
         icon: deprecatedDetails?.icon ?? item.icon,
@@ -913,6 +945,26 @@ function visible(
         kind,
       };
     });
+}
+
+function visibleTemplateSuggestions(
+  suggestions: Fig.Suggestion[],
+  partial: string,
+  queryTerm: string,
+  strategy: Fig.Arg["filterStrategy"] | Fig.Subcommand["filterStrategy"] = "default",
+): Completion[] {
+  const hasDirectoryPrefix = partial.includes("/");
+  const pathSegment = partial.slice(partial.lastIndexOf("/") + 1);
+  // Path rows show only the basename, while their insertValue retains the directory prefix.
+  return suggestions.flatMap((suggestion) =>
+    visible(
+      [suggestion],
+      hasDirectoryPrefix ? pathSegment : queryTerm,
+      "argument",
+      strategy,
+      hasDirectoryPrefix ? pathSegment : partial,
+    ),
+  );
 }
 
 export async function complete(
@@ -967,11 +1019,11 @@ export async function complete(
     options: [...inheritedOptions, ...(spec.options ?? [])],
   };
   const separators = optionSeparators(effectiveSpec);
-  const options = list(effectiveSpec.options ?? []).filter((option) =>
-    isOptionAvailable(
-      option as FigOption,
+  const optionSpecs = effectiveSpec.options ?? [];
+  const options = list(
+    availableOptions(
+      optionSpecs,
       parsed.words,
-      effectiveSpec.options ?? [],
       effectiveSpec.parserDirectives?.flagsArePosixNoncompliant,
       separators,
     ),
@@ -1155,11 +1207,21 @@ export async function complete(
   const allArgumentSuggestions = [
     ...visible([...currentToken, ...staticArgs], argumentPartial, "argument", argumentFilter),
     ...generatedGroups.flatMap((group) =>
-      visible(group.suggestions, group.queryTerm, "argument", argumentFilter),
+      visible(group.suggestions, group.queryTerm, "argument", argumentFilter, argumentPartial),
     ),
-    ...visible(argumentTemplateSuggestions, argumentPartial, "argument", argumentFilter),
+    ...visibleTemplateSuggestions(
+      argumentTemplateSuggestions,
+      argumentPartial,
+      argumentPartial,
+      argumentFilter,
+    ),
     ...generatedTemplateGroups.flatMap((group) =>
-      visible(group.suggestions, group.queryTerm, "argument", argumentFilter),
+      visibleTemplateSuggestions(
+        group.suggestions,
+        argumentPartial,
+        group.queryTerm,
+        argumentFilter,
+      ),
     ),
   ]
     .map((suggestion, index) => ({ suggestion, index }))
@@ -1177,7 +1239,6 @@ export async function complete(
     })
     .map((completion) => ({
       ...completion,
-      typedPrefix: argumentPartial,
       insertValue: `${argumentContext.insertPrefix}${completion.insertValue}`,
       isDangerous: completion.isDangerous || argumentIsDangerous,
     }));
@@ -1278,21 +1339,31 @@ async function completeExecutableNames(partial: string, searchPath: string): Pro
   for (const directory of searchPath.split(path.delimiter)) {
     try {
       const entries = await readDirectoryEntries(directory);
-      for (const entry of entries) {
-        if (
-          (!entry.isFile() && !entry.isSymbolicLink()) ||
-          !entry.name.startsWith(partial) ||
-          seen.has(entry.name)
-        )
-          continue;
-        try {
-          const details = await stat(path.join(directory, entry.name));
-          if (!(details.mode & 0o111)) continue;
-        } catch {
-          continue;
+      const candidates = entries.filter(
+        (entry) =>
+          (entry.isFile() || entry.isSymbolicLink()) &&
+          entry.name.startsWith(partial) &&
+          !seen.has(entry.name),
+      );
+      for (
+        let offset = 0;
+        offset < candidates.length && seen.size < MAX_SUGGESTIONS;
+        offset += FILESYSTEM_CHECK_BATCH_SIZE
+      ) {
+        const batch = candidates.slice(offset, offset + FILESYSTEM_CHECK_BATCH_SIZE);
+        const executable = await Promise.all(
+          batch.map(async (entry) => {
+            try {
+              return !!((await stat(path.join(directory, entry.name))).mode & 0o111);
+            } catch {
+              return false;
+            }
+          }),
+        );
+        for (const [index, isExecutable] of executable.entries()) {
+          if (isExecutable) seen.add(batch[index].name);
+          if (seen.size >= MAX_SUGGESTIONS) break;
         }
-        seen.add(entry.name);
-        if (seen.size >= MAX_SUGGESTIONS) break;
       }
     } catch {
       // A PATH entry can disappear or be unreadable; skip it.
@@ -1308,49 +1379,39 @@ async function completeExecutableNames(partial: string, searchPath: string): Pro
   }));
 }
 
-function isOptionAvailable(
-  option: FigOption,
+function availableOptions(
+  options: FigOption[],
   usedTokens: string[],
-  allOptions: FigOption[],
   flagsArePosixNoncompliant = false,
   separators: string[] = ["=", ":"],
-): boolean {
-  const names = typeof option.name === "string" ? [option.name] : (option.name ?? []);
-  const usedNames = new Set(
-    usedTokens.flatMap((token) => {
-      const direct = allOptions.find(
-        (candidate) =>
-          optionMatches(candidate, token) ||
-          optionValue(candidate, token, separators) !== undefined,
-      );
-      if (direct) return optionNames(direct);
-      return (
-        expandShortOptionChain(token, allOptions, flagsArePosixNoncompliant)?.flatMap(
-          ({ option: usedOption }) => optionNames(usedOption),
-        ) ?? []
-      );
-    }),
-  );
-  const hasUsedName = (optionName: string) => usedNames.has(optionName);
-  const used = usedTokens.filter((token) => {
-    const direct = allOptions.find(
+): FigOption[] {
+  const usedNamesByToken = usedTokens.map((token) => {
+    const direct = options.find(
       (candidate) =>
         optionMatches(candidate, token) || optionValue(candidate, token, separators) !== undefined,
     );
-    const tokenNames = direct
+    const names = direct
       ? optionNames(direct)
-      : (expandShortOptionChain(token, allOptions, flagsArePosixNoncompliant)?.flatMap(
+      : (expandShortOptionChain(token, options, flagsArePosixNoncompliant)?.flatMap(
           ({ option: usedOption }) => optionNames(usedOption),
         ) ?? []);
-    return tokenNames.some((name) => names.includes(name));
-  }).length;
-  if (option.isRepeatable !== undefined && option.isRepeatable !== true) {
-    const maximum = typeof option.isRepeatable === "number" ? option.isRepeatable : 1;
-    if (used >= maximum) return false;
-  }
-  if (option.dependsOn?.some((dependency) => !hasUsedName(dependency))) return false;
-  if (option.exclusiveOn?.some((exclusive) => hasUsedName(exclusive))) return false;
-  return true;
+    return new Set(names);
+  });
+  const usedNames = new Set(usedNamesByToken.flatMap((names) => [...names]));
+
+  return options.filter((option) => {
+    const names = new Set(optionNames(option));
+    const used = usedNamesByToken.reduce((count, tokenNames) => {
+      return count + (hasAnyName(tokenNames, names) ? 1 : 0);
+    }, 0);
+    if (option.isRepeatable !== undefined && option.isRepeatable !== true) {
+      const maximum = typeof option.isRepeatable === "number" ? option.isRepeatable : 1;
+      if (used >= maximum) return false;
+    }
+    if (option.dependsOn?.some((dependency) => !usedNames.has(dependency))) return false;
+    if (option.exclusiveOn?.some((exclusive) => usedNames.has(exclusive))) return false;
+    return true;
+  });
 }
 
 type TemplateSuggestion = Omit<Fig.Suggestion, "name"> & {

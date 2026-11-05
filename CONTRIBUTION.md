@@ -4,7 +4,7 @@ Thanks for helping improve Cue. Bug reports, focused fixes, and thoughtful featu
 
 ## Get started
 
-Cue is a pnpm monorepo. It currently targets macOS, Apple Terminal, and zsh.
+Cue is a pnpm monorepo. It targets macOS, Apple Terminal, the VS Code integrated terminal, and zsh.
 
 ```bash
 git clone https://github.com/8starlabs/cue.git
@@ -22,7 +22,7 @@ pnpm dev:docs
 
 ## Develop alongside the Homebrew install
 
-You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue currently supports one running instance at a time because both builds use the same process name and socket. When run from Apple Terminal, the build script stops the running Cue process and opens the local build.
+You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue currently supports one running instance at a time because both builds use the same process name and socket. When run from Apple Terminal, the build script stops the running Cue process and opens the local build. When run from VS Code, it builds the app but does not relaunch it; quit the running Cue app and start a new integrated zsh terminal to use the rebuilt version.
 
 From the repository root in Terminal, point Cue at the local package, load its zsh integration, and build the app:
 
@@ -51,6 +51,14 @@ zsh -n packages/cue/zsh/cue.zsh
 
 Building the native app requires macOS and Xcode Command Line Tools.
 
+Local builds are ad hoc signed unless `CUE_CODESIGN_IDENTITY` is set. Ad hoc signatures identify a specific build, so macOS may ask for Accessibility approval again after rebuilding. For a stable signing identity, obtain an Apple [Developer ID Application certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) and install it in your login keychain. Then build with:
+
+```bash
+CUE_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" pnpm build:app
+```
+
+The certificate identity stays the same across app versions, which lets macOS recognize updates as the same Cue app. Moving from an existing ad hoc build to the Developer ID-signed app can require Accessibility approval once more.
+
 The Husky pre-commit hook formats staged files with Prettier, runs ESLint on staged JavaScript and TypeScript, and runs the unit tests. `pnpm install` enables the hook in a fresh checkout. To format the whole repository manually, run `pnpm format`.
 
 ## Open a pull request
@@ -75,10 +83,11 @@ Replace `0.2.0` with the version being released. The first release can use the v
 Build the release archive and let the script update the formula checksum:
 
 ```bash
-pnpm changelog:check
-pnpm release:cue
+CUE_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" pnpm release:cue
 pnpm version:check
 ```
+
+Release packaging requires a stable Apple Developer ID signature and verifies it before creating the archive. Ad hoc builds are rejected so a release cannot accidentally ship with a per-build identity. Apple also recommends notarizing Developer ID-signed apps distributed outside the Mac App Store; notarization is separate from Cue's Homebrew archive step.
 
 This package currently supports Apple Silicon only. Commit and push the version, formula, and changelog changes. Install and authenticate [GitHub CLI](https://cli.github.com/) with `gh auth login`, then run:
 

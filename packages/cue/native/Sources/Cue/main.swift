@@ -33,6 +33,7 @@ struct RequestMetadata {
     let promptWidth: Int
     let terminalRow: Int
     let terminalColumn: Int
+    let terminalSession: String
     let cwd: String
     let line: String
     let action: String
@@ -43,6 +44,32 @@ private let maximumVisibleSuggestions = 7
 private let maximumSuggestions = 50
 private let suggestionRowHeight: CGFloat = 18
 
+private enum TerminalHost {
+    static let appleTerminalBundleIdentifier = "com.apple.Terminal"
+    static let vscodeBundleIdentifiers: Set<String> = [
+        "com.microsoft.VSCode",
+        "com.microsoft.VSCodeInsiders"
+    ]
+
+    static func supports(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return bundleIdentifier == appleTerminalBundleIdentifier ||
+            vscodeBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    static func isVSCode(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return vscodeBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    static func accepts(_ application: NSRunningApplication?, metadata: RequestMetadata) -> Bool {
+        guard let bundleIdentifier = application?.bundleIdentifier else { return false }
+        if bundleIdentifier == appleTerminalBundleIdentifier { return true }
+        guard isVSCode(bundleIdentifier) else { return false }
+        return metadata.environmentVariables["TERM_PROGRAM"]?.lowercased().hasPrefix("vscode") == true
+    }
+}
+
 private enum PopupSide: Equatable {
     case belowCaret
     case aboveCaret
@@ -52,11 +79,16 @@ private enum PopupSide: Equatable {
 private struct PopupPosition {
     let origin: NSPoint
     let side: PopupSide
+    let availableHeight: CGFloat
 }
 
 private struct DirectoryPopupAnchor {
     let side: PopupSide
-    let caretEdge: CGFloat
+    let terminalSession: String
+    let columns: Int
+    let lines: Int
+    let cwd: String
+    let attachedEdge: CGFloat
 }
 
 final class CueModel: ObservableObject {
@@ -97,12 +129,16 @@ final class CuePanelController {
     private var visibleCompletions: [Completion] = []
     private var selectedIndex = 0
     private var suggestionWindowStart = 0
+    private var visibleRowLimit = maximumVisibleSuggestions
     private var hasAcceptedSelection = false
     private var acceptedSelectionBuffer: String?
     private var listOrigin = NSPoint.zero
+    private var popupSide = PopupSide.constrained
     private var directoryPopupAnchor: DirectoryPopupAnchor?
     private var activeVisibleFrame: CGRect?
     private var terminalWindowRect: CGRect?
+    private var activeTerminalFocusedElement: AXUIElement?
+    private var activeTerminalProcessIdentifier: pid_t?
     private var latestMetadata: RequestMetadata?
     private var descriptionAtBottom = true
     private var layoutHotKey: EventHotKeyRef?
@@ -121,7 +157,15 @@ final class CuePanelController {
             backing: .buffered,
             defer: false
         )
-        hostingView = NSHostingView(rootView: CuePanelView(completions: [], selectedIndex: 0, windowStart: 0, description: "", descriptionAtBottom: false, hasAcceptedSelection: false))
+        hostingView = NSHostingView(rootView: CuePanelView(
+            completions: [],
+            selectedIndex: 0,
+            windowStart: 0,
+            rowLimit: maximumVisibleSuggestions,
+            description: "",
+            descriptionAtBottom: false,
+            hasAcceptedSelection: false
+        ))
         panel.contentView = hostingView
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -148,18 +192,32 @@ final class CuePanelController {
 
     func show(_ completions: [Completion], metadata: RequestMetadata) {
         guard !metadata.line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            hide(clearDirectoryAnchor: true)
-            return
-        }
-        guard !completions.isEmpty,
-              NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
             hide()
             return
         }
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        guard !completions.isEmpty,
+              TerminalHost.accepts(frontmostApplication, metadata: metadata) else {
+            hide()
+            return
+        }
+        activeTerminalProcessIdentifier = frontmostApplication?.processIdentifier
+        activeTerminalFocusedElement = focusedUIElement(for: frontmostApplication?.processIdentifier)
 
         let previousMetadata = latestMetadata
         let previousWindowRect = terminalWindowRect
+        let wasVisible = panel.isVisible
         visibleCompletions = Array(completions.prefix(maximumSuggestions))
+        visibleRowLimit = maximumVisibleSuggestions
+        let isDirectoryPath = metadata.line == "cd" || metadata.line.hasPrefix("cd ")
+        let sameDirectorySession = isDirectoryPath && wasVisible &&
+            (previousMetadata.map {
+                ($0.line == "cd" || $0.line.hasPrefix("cd ")) &&
+                    $0.terminalSession == metadata.terminalSession &&
+                    $0.columns == metadata.columns && $0.lines == metadata.lines &&
+                    $0.cwd == metadata.cwd
+            } ?? false)
+        if !sameDirectorySession { directoryPopupAnchor = nil }
         let selectedLine = metadata.line.trimmingCharacters(in: .whitespaces)
         let selectedCDPath = selectedLine == "cd"
             ? ""
@@ -193,51 +251,82 @@ final class CuePanelController {
         suggestionWindowStart = 0
         latestMetadata = metadata
         renderPanel()
-        let combinedSize = combinedPanelSize
-        if let position = popupOrigin(metadata: metadata, panelSize: combinedSize) {
+        if var position = fittedPopupPosition(for: metadata) {
             var origin = position.origin
-            let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect)
-            let isDirectoryPath = metadata.line.hasPrefix("cd ")
-            let sameTerminalContext = previousMetadata.map {
-                $0.line.hasPrefix("cd ") &&
-                    $0.columns == metadata.columns &&
-                    $0.lines == metadata.lines &&
-                    $0.cwd == metadata.cwd
-            } ?? false
-            let sameDirectorySession = isDirectoryPath && sameWindow &&
-                sameTerminalContext
-            if !sameDirectorySession { directoryPopupAnchor = nil }
-
+            // Preserve the caret-adjacent edge for the whole live `cd` editing
+            // session. The accepted path may replace the current token, so it
+            // is not necessarily a prefix extension of the previous buffer.
+            // Also avoid invalidating the anchor for small screen-frame
+            // changes (for example, menu bar or Dock updates); the current
+            // visible frame is still checked below before reusing its y value.
+            let sameWindow = rectsMatch(previousWindowRect, terminalWindowRect, tolerance: 12)
+            if !sameWindow { directoryPopupAnchor = nil }
             if sameDirectorySession,
+               sameWindow,
                let anchor = directoryPopupAnchor,
-               anchor.side == position.side,
-               position.side != .constrained {
-                let visible = activeVisibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-                let anchoredY = position.side == .belowCaret
-                    ? anchor.caretEdge - panel.frame.height
-                    : anchor.caretEdge
-                let anchoredMaxY = anchoredY + panel.frame.height
-                let fitsScreen = anchoredY >= visible.minY + 8 && anchoredMaxY <= visible.maxY - 8
-                if fitsScreen {
-                    origin.y = anchoredY
-                } else {
+               anchor.terminalSession == metadata.terminalSession,
+               anchor.columns == metadata.columns,
+               anchor.lines == metadata.lines,
+               anchor.cwd == metadata.cwd,
+               anchor.side != .constrained,
+               panel.frame.height > 0 {
+                // Keep the original placement side for this live `cd` input.
+                // The extra Enter row can make a fresh fit calculation flip
+                // sides after accepting a folder, which looks like a vertical
+                // jump even though the caret stayed on the same line.
+                if position.side != anchor.side {
+                    visibleRowLimit = maximumVisibleSuggestions
+                    renderPanel()
+                    if let anchoredPosition = fittedPopupPosition(for: metadata, preferredSide: anchor.side) {
+                        position = anchoredPosition
+                        origin = anchoredPosition.origin
+                    }
+                }
+
+                if anchor.side != position.side {
                     directoryPopupAnchor = nil
+                } else {
+                    // Keep the caret-adjacent edge fixed while path
+                    // suggestions refresh. Terminal's DSR row can briefly
+                    // change during a redraw, and the panel height can change
+                    // when the Enter row appears. Neither should replace the
+                    // original caret anchor.
+                    let anchoredY = anchor.side == .belowCaret
+                        ? anchor.attachedEdge - panel.frame.height
+                        : anchor.attachedEdge
+                    let anchoredMaxY = anchoredY + panel.frame.height
+                    let visible = activeVisibleFrame ?? .zero
+                    let fitsScreen = anchoredY >= visible.minY + 8 && anchoredMaxY <= visible.maxY - 8
+                    if fitsScreen {
+                        origin.y = anchoredY
+                    } else {
+                        directoryPopupAnchor = nil
+                    }
                 }
             }
-            if isDirectoryPath && position.side != .constrained {
+
+            listOrigin = origin
+            popupSide = position.side
+            panel.setFrameOrigin(listOrigin)
+            if !descriptionAtBottom { positionDetailsPanel() }
+
+            if isDirectoryPath, position.side != .constrained {
                 if directoryPopupAnchor == nil || directoryPopupAnchor?.side != position.side {
-                    let caretEdge = position.side == .belowCaret ? origin.y + panel.frame.height : origin.y
+                    let attachedEdge = position.side == .belowCaret
+                        ? origin.y + panel.frame.height
+                        : origin.y
                     directoryPopupAnchor = DirectoryPopupAnchor(
                         side: position.side,
-                        caretEdge: caretEdge
+                        terminalSession: metadata.terminalSession,
+                        columns: metadata.columns,
+                        lines: metadata.lines,
+                        cwd: metadata.cwd,
+                        attachedEdge: attachedEdge
                     )
                 }
             } else {
                 directoryPopupAnchor = nil
             }
-            listOrigin = origin
-            panel.setFrameOrigin(listOrigin)
-            if !descriptionAtBottom { positionDetailsPanel() }
         } else {
             hide()
             return
@@ -248,20 +337,31 @@ final class CuePanelController {
         registerLayoutHotKey()
     }
 
-    func hide(clearDirectoryAnchor: Bool = false) {
+    func hide() {
         panel.orderOut(nil)
         detailsPanel.orderOut(nil)
         visibleCompletions = []
         selectedIndex = 0
         suggestionWindowStart = 0
+        visibleRowLimit = maximumVisibleSuggestions
         hasAcceptedSelection = false
         acceptedSelectionBuffer = nil
-        if clearDirectoryAnchor {
-            terminalWindowRect = nil
-            latestMetadata = nil
-            directoryPopupAnchor = nil
-        }
+        popupSide = .constrained
+        directoryPopupAnchor = nil
+        terminalWindowRect = nil
+        activeVisibleFrame = nil
+        latestMetadata = nil
+        activeTerminalFocusedElement = nil
+        activeTerminalProcessIdentifier = nil
         unregisterLayoutHotKey()
+    }
+
+    func isActiveTerminal(_ application: NSRunningApplication) -> Bool {
+        guard activeTerminalProcessIdentifier == application.processIdentifier else { return false }
+        guard TerminalHost.isVSCode(application.bundleIdentifier),
+              let previousFocus = activeTerminalFocusedElement,
+              let currentFocus = focusedUIElement(for: application.processIdentifier) else { return true }
+        return CFEqual(previousFocus, currentFocus)
     }
 
     func select(_ index: Int) {
@@ -271,10 +371,10 @@ final class CuePanelController {
         let displayCount = visibleCompletions.count + (hasAcceptedSelection ? 1 : 0)
         if selectedIndex < suggestionWindowStart {
             suggestionWindowStart = selectedIndex
-        } else if selectedIndex >= suggestionWindowStart + maximumVisibleSuggestions {
-            suggestionWindowStart = selectedIndex - maximumVisibleSuggestions + 1
+        } else if selectedIndex >= suggestionWindowStart + visibleRowLimit {
+            suggestionWindowStart = selectedIndex - visibleRowLimit + 1
         }
-        suggestionWindowStart = min(suggestionWindowStart, max(0, displayCount - maximumVisibleSuggestions))
+        suggestionWindowStart = min(suggestionWindowStart, max(0, displayCount - visibleRowLimit))
         renderPanel()
         if !descriptionAtBottom { positionDetailsPanel() }
     }
@@ -284,6 +384,44 @@ final class CuePanelController {
             width: panel.frame.width + (descriptionAtBottom ? 0 : panelGap + detailsPanel.frame.width),
             height: panel.frame.height
         )
+    }
+
+    private func fittedPopupPosition(
+        for metadata: RequestMetadata,
+        preferredSide: PopupSide? = nil
+    ) -> PopupPosition? {
+        guard var position = popupOrigin(
+            metadata: metadata,
+            panelSize: combinedPanelSize,
+            preferredSide: preferredSide
+        ) else {
+            return nil
+        }
+
+        guard panel.frame.height > position.availableHeight else { return position }
+
+        // On a short display edge, reduce the number of visible rows instead
+        // of clamping the whole panel far away from the live caret.
+        let overflow = panel.frame.height - position.availableHeight
+        let rowsToRemove = max(1, Int(ceil(overflow / suggestionRowHeight)))
+        visibleRowLimit = max(1, visibleRowLimit - rowsToRemove)
+        let displayCount = visibleCompletions.count + (hasAcceptedSelection ? 1 : 0)
+        if selectedIndex < suggestionWindowStart {
+            suggestionWindowStart = selectedIndex
+        } else if selectedIndex >= suggestionWindowStart + visibleRowLimit {
+            suggestionWindowStart = selectedIndex - visibleRowLimit + 1
+        }
+        suggestionWindowStart = min(suggestionWindowStart, max(0, displayCount - visibleRowLimit))
+        renderPanel()
+
+        if let compactPosition = popupOrigin(
+            metadata: metadata,
+            panelSize: combinedPanelSize,
+            preferredSide: preferredSide
+        ) {
+            position = compactPosition
+        }
+        return position
     }
 
     private func renderPanel() {
@@ -324,6 +462,7 @@ final class CuePanelController {
             completions: displayCompletions,
             selectedIndex: selectedIndex,
             windowStart: suggestionWindowStart,
+            rowLimit: visibleRowLimit,
             description: description,
             descriptionAtBottom: descriptionAtBottom,
             hasAcceptedSelection: hasAcceptedSelection
@@ -339,9 +478,10 @@ final class CuePanelController {
     private func toggleDescriptionLayout() {
         guard panel.isVisible, !visibleCompletions.isEmpty else { return }
         descriptionAtBottom.toggle()
+        visibleRowLimit = maximumVisibleSuggestions
         renderPanel()
         if let latestMetadata,
-           let position = popupOrigin(metadata: latestMetadata, panelSize: combinedPanelSize) {
+           let position = fittedPopupPosition(for: latestMetadata) {
             listOrigin = position.origin
             panel.setFrameOrigin(position.origin)
         }
@@ -446,8 +586,14 @@ final class CuePanelController {
         )
     }
 
-    private func popupOrigin(metadata: RequestMetadata, panelSize: NSSize) -> PopupPosition? {
-        let terminalPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+    private func popupOrigin(
+        metadata: RequestMetadata,
+        panelSize: NSSize,
+        preferredSide: PopupSide? = nil
+    ) -> PopupPosition? {
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let terminalPID = frontmostApplication?.processIdentifier ?? 0
+        let isVSCode = TerminalHost.isVSCode(frontmostApplication?.bundleIdentifier)
         let app = AXUIElementCreateApplication(terminalPID)
         var windowValue: CFTypeRef?
         var windowElement: AXUIElement?
@@ -472,12 +618,13 @@ final class CuePanelController {
             }
         }
         let serverWindowRect = windowServerRect(for: terminalPID, nearestTo: axWindowRect).flatMap(validWindowRect)
-        // Match the focused Accessibility window to its WindowServer frame.
-        // The text-area bounds are translated through that frame so placement
-        // follows the visible Terminal window, including on secondary displays.
+        // Use the WindowServer frame for screen selection and edge clamping.
+        // Accessibility element frames below remain in global screen space.
         let windowRect = serverWindowRect ?? axWindowRect
         terminalWindowRect = windowRect
-
+        let accessibilityTabBarRect = isVSCode ? nil : windowElement.flatMap {
+            terminalTabBarRect(in: $0, windowRect: windowRect ?? axWindowRect)
+        }
         var focusedValue: CFTypeRef?
         var focusedElement: AXUIElement?
         var textRect: CGRect?
@@ -494,7 +641,14 @@ final class CuePanelController {
         }
 
         var caretRect = focusedElement.flatMap(axCaretRect)
-        if caretRect == nil || textRect == nil,
+        var vscodeViewportRect: CGRect?
+        if isVSCode {
+            vscodeViewportRect = vscodeTerminalViewportRect(
+                around: focusedElement,
+                windowRect: axWindowRect
+            )
+            if textRect == nil { textRect = vscodeViewportRect }
+        } else if caretRect == nil || textRect == nil,
            let textElement = terminalTextElement(in: windowElement ?? app, windowRect: axWindowRect) {
             focusedElement = textElement
             caretRect = axCaretRect(textElement)
@@ -504,25 +658,39 @@ final class CuePanelController {
             }
         }
 
-        let screen = serverWindowRect.flatMap(screenForTerminalWindow)
+        // A Terminal window may straddle displays. Its center can be on a
+        // different screen from the active tab's caret, so choose the screen
+        // from the live text position before falling back to the window.
+        let anchorPoint = caretRect.map { CGPoint(x: $0.midX, y: $0.midY) }
+            ?? textRect.map { CGPoint(x: $0.midX, y: $0.midY) }
+        let screen = anchorPoint.flatMap(screenForQuartzPoint)
+            ?? serverWindowRect.flatMap(screenForTerminalWindow)
             ?? axWindowRect.flatMap(screenForTerminalWindow)
             ?? NSScreen.main
             ?? NSScreen.screens.first
         activeVisibleFrame = screen?.visibleFrame
-        let quartzTextRect = textRect.flatMap {
-            quartzRect(
-                fromAccessibility: $0,
-                windowAccessibilityRect: axWindowRect,
-                windowServerRect: serverWindowRect
+        // AX element frames are already global screen coordinates. Use them
+        // directly rather than offsetting them from the window frame; Terminal
+        // can report a different window frame for a tabbed window than the
+        // frame CoreGraphics sees, which shifts the cursor grid vertically.
+        let quartzTextRect = textRect
+        // AX bounds for a text range are already in global screen
+        // coordinates. Keep the caret in that coordinate space: rebasing it
+        // through the window frame shifts it when Terminal's tab strip makes
+        // the Accessibility window frame differ from the WindowServer frame.
+        let quartzCaretRect = caretRect
+        // AX can temporarily omit or misreport Terminal's text area (for
+        // example after a clear). Keep suggestions available by deriving the
+        // grid from the visible window frame and Terminal's live DSR row. A
+        // tab bar adds another row of chrome, so anchor the fallback grid below
+        // the actual tab strip instead of assuming a title bar is the only one.
+        let terminalGridRect = isVSCode
+            ? quartzTextRect
+            : terminalGridRect(
+                textRect: quartzTextRect,
+                windowRect: windowRect,
+                tabBarRect: accessibilityTabBarRect
             )
-        }
-        let quartzCaretRect = caretRect.flatMap {
-            quartzRect(
-                fromAccessibility: $0,
-                windowAccessibilityRect: axWindowRect,
-                windowServerRect: serverWindowRect
-            )
-        }
         let popupGap: CGFloat = 4
         let columns = max(1, metadata.columns)
         let lines = max(1, metadata.lines)
@@ -532,7 +700,7 @@ final class CuePanelController {
                   caret.height > 4,
                   caret.origin.x.isFinite,
                   caret.origin.y.isFinite,
-                  (serverWindowRect ?? axWindowRect).map({
+                  (axWindowRect ?? serverWindowRect).map({
                       $0.insetBy(dx: -24, dy: -24).contains(CGPoint(x: caret.minX, y: caret.midY))
                   }) ?? true else { return nil }
             return caret
@@ -543,13 +711,37 @@ final class CuePanelController {
         var caretAnchorX: CGFloat?
         var belowCaretY: CGFloat?
         var aboveCaretY: CGFloat?
-        if metadata.terminalRow > 0, let textRect = quartzTextRect {
-            // Use Terminal's live cursor report with the actual accessible
-            // text grid. This avoids AX's range bounds, which can point above
-            // the visible insertion caret in Terminal.
+        if !isVSCode, let caret = accessibilityCaret {
+            // Use Terminal's live caret bounds as the source of truth. The
+            // terminal grid estimate can be vertically offset when Terminal
+            // adds chrome such as its tab strip (notably after Cmd+T), because
+            // AX may expose the text area and tab group differently across
+            // windows. The selected-text range already accounts for the
+            // active tab and the actual visible insertion point.
+            let lowerEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
+            let upperEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.minY), on: screen)
+            x = lowerEdge.x
+            caretAnchorX = lowerEdge.x
+            belowCaretY = lowerEdge.y
+            aboveCaretY = upperEdge.y
+            y = lowerEdge.y - panelSize.height - popupGap
+        } else if metadata.terminalRow > 0, let textRect = terminalGridRect {
+            // Fall back to the shell's live DSR grid position only when
+            // Terminal does not provide a valid Accessibility caret.
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
-            let terminalColumn = min(columns - 1, max(0, absoluteColumn % columns))
+            let logicalColumn = min(columns - 1, max(0, absoluteColumn % columns))
+            let reportedColumn = metadata.terminalColumn > 0
+                ? min(columns - 1, max(0, metadata.terminalColumn - 1))
+                : logicalColumn
+            let columnDistance = min(
+                abs(reportedColumn - logicalColumn),
+                columns - abs(reportedColumn - logicalColumn)
+            )
+            // DSR is authoritative when it agrees with the prompt and input
+            // width. After Terminal clears or scrolls, it can briefly return a
+            // stale column; in that case use the current ZLE cursor position.
+            let terminalColumn = columnDistance <= 2 ? reportedColumn : logicalColumn
             let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
             let terminalAnchor = appKitPoint(fromQuartz: CGPoint(
                 x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
@@ -560,34 +752,37 @@ final class CuePanelController {
             belowCaretY = terminalAnchor.y
             aboveCaretY = terminalAnchor.y + cellHeight
             y = terminalAnchor.y - panelSize.height - popupGap
-        } else if let caret = accessibilityCaret {
-            let lowerEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
-            let upperEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.minY), on: screen)
-            x = lowerEdge.x
-            caretAnchorX = lowerEdge.x
-            belowCaretY = lowerEdge.y
-            aboveCaretY = upperEdge.y
-            y = lowerEdge.y - panelSize.height - popupGap
         } else {
+            // If neither Terminal's live DSR position nor its accessibility
+            // caret is available, don't invent a row from the grid height.
+            // A guessed row is especially wrong after clear or scrollback.
             return nil
         }
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let edgePadding: CGFloat = 8
         let maxOriginY = max(visible.minY + edgePadding, visible.maxY - panelSize.height - edgePadding)
         var side = PopupSide.constrained
+        var availableHeight = max(0, visible.height - edgePadding * 2)
         if let belowCaretY, let aboveCaretY {
-            let availableBelow = belowCaretY - visible.minY - edgePadding - popupGap
-            let availableAbove = visible.maxY - aboveCaretY - edgePadding - popupGap
+            let availableBelow = max(0, belowCaretY - visible.minY - edgePadding - popupGap)
+            let availableAbove = max(0, visible.maxY - aboveCaretY - edgePadding - popupGap)
+            let preferredAvailable = preferredSide == PopupSide.aboveCaret ? availableAbove : availableBelow
             // Prefer the familiar below-caret placement while it fits. Flip
-            // above the caret at the bottom edge; if neither side can fit the
-            // whole panel, use the roomier side and clamp it to this display.
-            side = if availableBelow >= panelSize.height {
+            // above the caret at the bottom edge. During one live directory
+            // completion, retain its first side if there is room for at least
+            // one suggestion and compress the row count as needed.
+            side = if let preferredSide,
+                      preferredSide != .constrained,
+                      preferredAvailable >= suggestionRowHeight + 4 {
+                preferredSide
+            } else if availableBelow >= panelSize.height {
                 .belowCaret
             } else if availableAbove >= panelSize.height || availableAbove > availableBelow {
                 .aboveCaret
             } else {
                 .belowCaret
             }
+            availableHeight = side == .aboveCaret ? availableAbove : availableBelow
             y = side == .aboveCaret
                 ? aboveCaretY + popupGap
                 : belowCaretY - panelSize.height - popupGap
@@ -605,13 +800,94 @@ final class CuePanelController {
             }
         }
         x = min(max(x, visible.minX + edgePadding), maxOriginX)
-        return PopupPosition(origin: NSPoint(x: x, y: y), side: side)
+        return PopupPosition(
+            origin: NSPoint(x: x, y: y),
+            side: side,
+            availableHeight: availableHeight
+        )
+    }
+
+    private func rectsMatch(_ lhs: CGRect?, _ rhs: CGRect?, tolerance: CGFloat) -> Bool {
+        guard let lhs, let rhs else { return false }
+        return abs(lhs.origin.x - rhs.origin.x) <= tolerance &&
+            abs(lhs.origin.y - rhs.origin.y) <= tolerance &&
+            abs(lhs.width - rhs.width) <= tolerance &&
+            abs(lhs.height - rhs.height) <= tolerance
+    }
+
+    private func terminalTabBarRect(in root: AXUIElement, windowRect: CGRect?) -> CGRect? {
+        guard let windowRect else { return nil }
+        var pending: [(element: AXUIElement, depth: Int)] = [(root, 0)]
+        var nextIndex = 0
+        var visited = 0
+
+        while nextIndex < pending.count, visited < 512 {
+            let current = pending[nextIndex]
+            nextIndex += 1
+            visited += 1
+            let element = current.element
+            var roleValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+               let role = roleValue as? String,
+               role == "AXTabGroup",
+               let rect = axRect(element),
+               rect.width >= windowRect.width * 0.5,
+               rect.height >= 14,
+               rect.height <= 72,
+               rect.minY >= windowRect.minY + 12,
+               rect.minY <= windowRect.minY + 112,
+               rect.maxY < windowRect.maxY - 100 {
+                return rect
+            }
+
+            guard current.depth < 9 else { continue }
+            var childrenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+               let children = childrenValue as? [AXUIElement] {
+                pending.append(contentsOf: children.map { ($0, current.depth + 1) })
+            }
+        }
+        return nil
+    }
+
+    private func fallbackTerminalGridRect(windowRect: CGRect?, tabBarRect: CGRect?) -> CGRect? {
+        guard let windowRect else { return nil }
+        let horizontalInset: CGFloat = 12
+        let bottomInset: CGFloat = tabBarRect == nil ? 34 : 8
+        let top = max(windowRect.minY + 34, (tabBarRect?.maxY ?? .zero) + (tabBarRect == nil ? 0 : 3))
+        let bottom = windowRect.maxY - bottomInset
+        guard windowRect.width > horizontalInset * 2, bottom - top > 100 else { return nil }
+        return CGRect(
+            x: windowRect.minX + horizontalInset,
+            y: top,
+            width: windowRect.width - horizontalInset * 2,
+            height: bottom - top
+        )
+    }
+
+    private func terminalGridRect(
+        textRect: CGRect?,
+        windowRect: CGRect?,
+        tabBarRect: CGRect?
+    ) -> CGRect? {
+        if let textRect {
+            guard let tabBarRect, textRect.minY < tabBarRect.maxY + 3 else { return textRect }
+            let gridTop = tabBarRect.maxY + 3
+            guard textRect.maxY - gridTop > 100 else { return textRect }
+            return CGRect(
+                x: textRect.minX,
+                y: gridTop,
+                width: textRect.width,
+                height: textRect.maxY - gridTop
+            )
+        }
+        return fallbackTerminalGridRect(windowRect: windowRect, tabBarRect: tabBarRect)
     }
 
     private func terminalTextElement(in root: AXUIElement, windowRect: CGRect?) -> AXUIElement? {
         var pending: [(element: AXUIElement, depth: Int)] = [(root, 0)]
         var visited = 0
-        var firstCaretElement: AXUIElement?
+        var firstTextElement: AXUIElement?
 
         while let current = pending.popLast(), visited < 160 {
             visited += 1
@@ -620,7 +896,6 @@ final class CuePanelController {
             if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
                let role = roleValue as? String,
                ["AXTextArea", "AXTextEntryArea", "AXTextView", "AXTextField"].contains(role),
-               axCaretRect(element) != nil,
                let rect = axRect(element),
                isPlausibleTerminalTextRect(rect, inside: windowRect) {
                 var focusedValue: CFTypeRef?
@@ -628,7 +903,7 @@ final class CuePanelController {
                    (focusedValue as? NSNumber)?.boolValue == true {
                     return element
                 }
-                if firstCaretElement == nil { firstCaretElement = element }
+                if firstTextElement == nil { firstTextElement = element }
             }
 
             guard current.depth < 7 else { continue }
@@ -638,7 +913,74 @@ final class CuePanelController {
                 pending.append(contentsOf: children.map { ($0, current.depth + 1) })
             }
         }
-        return firstCaretElement
+        return firstTextElement
+    }
+
+    private func vscodeTerminalViewportRect(around focusedElement: AXUIElement?, windowRect: CGRect?) -> CGRect? {
+        guard var element = focusedElement else { return nil }
+        var firstViewport: CGRect?
+        var visited = 0
+
+        while visited < 10 {
+            visited += 1
+            if let rect = axRect(element), isPlausibleVSCodeTerminalRect(rect, inside: windowRect) {
+                let fillsWindow = windowRect.map {
+                    rect.width >= $0.width * 0.98 && rect.height >= $0.height * 0.84
+                } ?? false
+                if !fillsWindow {
+                    if firstViewport == nil { firstViewport = rect }
+                    let label = [
+                        kAXTitleAttribute as String,
+                        kAXDescriptionAttribute as String,
+                        kAXHelpAttribute as String,
+                        kAXIdentifierAttribute as String
+                    ].compactMap { axStringAttribute($0, from: element) }
+                        .joined(separator: " ")
+                        .lowercased()
+                    if label.contains("terminal") { return rect }
+                }
+            }
+
+            var parentValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentValue) == .success,
+                  let parentValue else { break }
+            element = unsafeBitCast(parentValue, to: AXUIElement.self)
+        }
+        return firstViewport
+    }
+
+    private func isPlausibleVSCodeTerminalRect(_ rect: CGRect, inside windowRect: CGRect?) -> Bool {
+        // VS Code exposes xterm's hidden input separately from its visible
+        // viewport. Walk up to the viewport, which can be short when the
+        // editor is split; the generic text-view threshold is too restrictive.
+        guard rect.width >= 80,
+              rect.height >= 32,
+              rect.origin.x.isFinite,
+              rect.origin.y.isFinite,
+              rect.width.isFinite,
+              rect.height.isFinite else { return false }
+        guard let windowRect else { return true }
+
+        let tolerance: CGFloat = 24
+        let expandedWindow = windowRect.insetBy(dx: -tolerance, dy: -tolerance)
+        return rect.width <= windowRect.width + tolerance * 2 &&
+            rect.height <= windowRect.height + tolerance * 2 &&
+            expandedWindow.contains(CGPoint(x: rect.midX, y: rect.midY))
+    }
+
+    private func axStringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private func focusedUIElement(for processIdentifier: pid_t?) -> AXUIElement? {
+        guard let processIdentifier else { return nil }
+        let application = AXUIElementCreateApplication(processIdentifier)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(application, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+              let value else { return nil }
+        return unsafeBitCast(value, to: AXUIElement.self)
     }
 
     private func isTerminalTextElement(_ element: AXUIElement) -> Bool {
@@ -646,14 +988,6 @@ final class CuePanelController {
         guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
               let role = roleValue as? String else { return false }
         return ["AXTextArea", "AXTextEntryArea", "AXTextView", "AXTextField"].contains(role)
-    }
-
-    private func rectsMatch(_ lhs: CGRect?, _ rhs: CGRect?) -> Bool {
-        guard let lhs, let rhs else { return false }
-        return abs(lhs.origin.x - rhs.origin.x) < 1 &&
-            abs(lhs.origin.y - rhs.origin.y) < 1 &&
-            abs(lhs.width - rhs.width) < 1 &&
-            abs(lhs.height - rhs.height) < 1
     }
 
     private func isPlausibleTerminalTextRect(_ rect: CGRect, inside windowRect: CGRect?) -> Bool {
@@ -676,10 +1010,13 @@ final class CuePanelController {
     }
 
     private func screenForTerminalWindow(_ rect: CGRect) -> NSScreen? {
-        let center = CGPoint(x: rect.midX, y: rect.midY)
+        screenForQuartzPoint(CGPoint(x: rect.midX, y: rect.midY))
+    }
+
+    private func screenForQuartzPoint(_ point: CGPoint) -> NSScreen? {
         return NSScreen.screens.first { screen in
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return false }
-            return CGDisplayBounds(CGDirectDisplayID(number.uint32Value)).contains(center)
+            return CGDisplayBounds(CGDirectDisplayID(number.uint32Value)).contains(point)
         }
     }
 
@@ -695,24 +1032,6 @@ final class CuePanelController {
             x: appKitFrame.minX + point.x - quartzFrame.minX,
             y: appKitFrame.maxY - (point.y - quartzFrame.minY)
         )
-    }
-
-    private func quartzRect(
-        fromAccessibility rect: CGRect,
-        windowAccessibilityRect: CGRect?,
-        windowServerRect: CGRect?
-    ) -> CGRect? {
-        guard let windowAccessibilityRect, let windowServerRect else { return rect }
-        let localRect = rect.offsetBy(
-            dx: -windowAccessibilityRect.minX,
-            dy: -windowAccessibilityRect.minY
-        )
-        let localWindowBounds = CGRect(origin: .zero, size: windowAccessibilityRect.size)
-            .insetBy(dx: -8, dy: -8)
-        guard localWindowBounds.contains(CGPoint(x: localRect.midX, y: localRect.midY)),
-              localRect.width <= localWindowBounds.width,
-              localRect.height <= localWindowBounds.height else { return nil }
-        return localRect.offsetBy(dx: windowServerRect.minX, dy: windowServerRect.minY)
     }
 
     private func axCaretRect(_ element: AXUIElement) -> CGRect? {
@@ -767,13 +1086,14 @@ struct CuePanelView: View {
     let completions: [Completion]
     let selectedIndex: Int
     let windowStart: Int
+    let rowLimit: Int
     let description: String
     let descriptionAtBottom: Bool
     let hasAcceptedSelection: Bool
 
     private var visibleSuggestions: [(offset: Int, element: Completion)] {
-        let start = min(max(0, windowStart), max(0, completions.count - maximumVisibleSuggestions))
-        return Array(completions.enumerated().dropFirst(start).prefix(maximumVisibleSuggestions))
+        let start = min(max(0, windowStart), max(0, completions.count - rowLimit))
+        return Array(completions.enumerated().dropFirst(start).prefix(rowLimit))
     }
 
     var body: some View {
@@ -1121,13 +1441,14 @@ final class CueService {
             ) { [weak self] notification in
                 guard let self else { return }
                 let activatedApp = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                if activatedApp?.bundleIdentifier != "com.apple.Terminal" {
+                if !TerminalHost.supports(activatedApp?.bundleIdentifier) {
                     self.panelController.hide()
                 }
             }
             self.visibilityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
                 guard let self else { return }
-                guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Terminal" else {
+                guard let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+                      TerminalHost.supports(frontmostApplication.bundleIdentifier) else {
                     self.panelController.hide()
                     self.previousTerminalWindow = nil
                     return
@@ -1136,13 +1457,18 @@ final class CueService {
                     self.previousTerminalWindow = nil
                     return
                 }
-                let terminal = AXUIElementCreateApplication(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0)
+                if !self.panelController.isActiveTerminal(frontmostApplication) {
+                    self.panelController.hide()
+                    self.previousTerminalWindow = nil
+                    return
+                }
+                let terminal = AXUIElementCreateApplication(frontmostApplication.processIdentifier)
                 var windowsValue: CFTypeRef?
                 if AXUIElementCopyAttributeValue(terminal, kAXWindowsAttribute as CFString, &windowsValue) == .success,
                    let windows = windowsValue as? [AXUIElement], windows.isEmpty {
                     self.panelController.hide()
                 }
-                let currentWindow = self.frontmostTerminalWindow()
+                let currentWindow = self.frontmostTerminalWindow(for: frontmostApplication)
                 if self.panelController.isVisible,
                    let previous = self.previousTerminalWindow,
                    let currentWindow,
@@ -1154,9 +1480,8 @@ final class CueService {
         }
     }
 
-    private func frontmostTerminalWindow() -> (id: CGWindowID, frame: CGRect)? {
-        guard let app = NSWorkspace.shared.frontmostApplication,
-              app.bundleIdentifier == "com.apple.Terminal",
+    private func frontmostTerminalWindow(for app: NSRunningApplication) -> (id: CGWindowID, frame: CGRect)? {
+        guard TerminalHost.supports(app.bundleIdentifier),
               let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
             return nil
         }
@@ -1267,13 +1592,14 @@ final class CueService {
         guard let separator = bytes.firstIndex(of: 0),
               let header = String(bytes: bytes[..<separator], encoding: .utf8),
               let line = String(bytes: bytes[(separator + 1)...], encoding: .utf8) else { return nil }
-        let fields = header.split(separator: "\t", maxSplits: 8, omittingEmptySubsequences: false)
+        let fields = header.split(separator: "\t", maxSplits: 9, omittingEmptySubsequences: false)
         guard fields.count >= 5,
               let cursor = Int(fields[0]), let columns = Int(fields[1]),
               let lines = Int(fields[2]), let promptWidth = Int(fields[3]) else { return nil }
         let hasCursorPosition = fields.count >= 7
         let terminalRow = hasCursorPosition ? Int(fields[4]) ?? 0 : 0
         let terminalColumn = hasCursorPosition ? Int(fields[5]) ?? 0 : 0
+        let terminalSession = fields.count >= 10 ? String(fields[9]) : ""
         let cwdIndex = hasCursorPosition ? 6 : 4
         let actionIndex = hasCursorPosition ? 7 : 5
         let action = fields.indices.contains(actionIndex) ? String(fields[actionIndex]) : ""
@@ -1286,7 +1612,7 @@ final class CueService {
             guard let separator = entry.firstIndex(of: "=") else { continue }
             environmentVariables[String(entry[..<separator])] = String(entry[entry.index(after: separator)...])
         }
-        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, cwd: String(fields[cwdIndex]), line: line, action: action, environmentVariables: environmentVariables)
+        return RequestMetadata(cursor: cursor, columns: columns, lines: lines, promptWidth: promptWidth, terminalRow: terminalRow, terminalColumn: terminalColumn, terminalSession: terminalSession, cwd: String(fields[cwdIndex]), line: line, action: action, environmentVariables: environmentVariables)
     }
 
     private func submit(_ metadata: RequestMetadata) {
@@ -1299,7 +1625,7 @@ final class CueService {
             // response already headed to the main queue must not reopen it.
             DispatchQueue.main.async {
                 guard self.isCurrentRequest(hideID) else { return }
-                self.panelController.hide(clearDirectoryAnchor: true)
+                self.panelController.hide()
             }
             engineQueue.async {
                 if self.isCurrentRequest(hideID) { self.latestRequest = nil }

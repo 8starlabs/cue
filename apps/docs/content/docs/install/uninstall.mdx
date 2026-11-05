@@ -1,0 +1,34 @@
+---
+title: Uninstall Cue
+description: Remove Cue and its shell integration from your Mac.
+---
+
+## Remove Cue
+
+1. Open `~/.zshrc` and remove the line that sources Cue:
+
+   ```sh
+   source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"
+   ```
+
+2. If Cue is running, open Activity Monitor, select Cue, click the stop button, and choose **Quit**.
+
+3. Uninstall the app:
+
+   ```sh
+   brew uninstall 8starlabs/cue/cue
+   ```
+
+Open a new Terminal window or VS Code integrated terminal after removing the startup line. You can also remove Cue from **System Settings → Privacy & Security → Accessibility**.
+
+## Remove the Homebrew tap (optional)
+
+The tap is Homebrew's local checkout of Cue's GitHub repository. It contains the formula Homebrew uses to install Cue. Removing the tap only removes this local copy; it does not delete the GitHub repository.
+
+If you do not plan to install Cue again, remove the tap after uninstalling Cue:
+
+```sh
+brew untap 8starlabs/cue
+```
+
+See [Install Cue](/docs/install/install-cue) to reinstall Cue, or [Update Cue](/docs/install/update) to upgrade it.
