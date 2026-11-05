@@ -10,14 +10,22 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
 
 ## Install
 
-1. **[Homebrew](https://brew.sh)**
+1. **Install with [Homebrew](https://brew.sh)**
+
+   Add Cue's tap, then install it:
 
    ```sh
    brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
    brew install 8starlabs/cue/cue
    ```
 
-   Add the source command printed by Homebrew to `~/.zshrc`, then open a new zsh session in Apple Terminal or VS Code. In VS Code, select zsh with **Terminal: Select Default Profile** if needed.
+   Enable Cue in zsh by adding its startup command to `~/.zshrc`:
+
+   ```sh
+   echo 'source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"' >> ~/.zshrc
+   ```
+
+   Open a new Apple Terminal window or create a new VS Code integrated terminal. In VS Code, make sure the terminal profile is zsh: open the Command Palette, choose **Terminal: Select Default Profile**, select **zsh**, then create a new terminal.
 
 2. **Build from source**
 
@@ -31,7 +39,7 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
    source "$PWD/packages/cue/zsh/cue.zsh"
    ```
 
-macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility**. See the [installation docs](apps/docs/content/docs/getting-started.mdx) for persistent shell setup, updates, and removal.
+For either installation method, macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility** so the popup can follow the terminal caret. See the [installation guide](https://cue.8starlabs.com/docs/install/install-cue) for setup details, updates, and removal.
 
 ## Contributing
 
