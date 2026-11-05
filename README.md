@@ -6,7 +6,7 @@ IDE-style command and path suggestions for Apple Terminal and the VS Code integr
 
 Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquired its technology](https://techcrunch.com/2023/08/29/amazon-fig-command-line-terminal-generative-ai/), and built Cue after Kiro [announced the retirement of inline shell autocomplete](https://kiro.dev/blog/cli-3/).
 
-**Available on:** Apple Silicon Macs running macOS 13 or later, in Apple Terminal or the VS Code integrated terminal with zsh.
+**Available on:** Apple Silicon Macs running macOS 13 or later, in Apple Terminal or the VS Code integrated terminal with zsh!
 
 ## Install
 
