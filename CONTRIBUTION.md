@@ -80,14 +80,16 @@ pnpm changelog:new
 
 Replace `0.2.0` with the version being released. The first release can use the version already in the package manifest. `version:cue` synchronizes the root and app manifests, updates the Homebrew formula version and `vX.Y.Z` archive URL, and marks the formula checksum as pending. `changelog:new` creates `changelogs/v0.2.0.mdx`; edit it with the user-visible changes. The same Markdown body appears on the site at `/changelogs` and in the GitHub Release.
 
-Build the release archive and let the script update the formula checksum:
+Build the release archive and let the script update the formula checksum. A Developer ID signature is recommended for public distribution. If you do not have one yet, the first archive can be built with Cue's stable ad hoc signature by explicitly opting in:
 
 ```bash
-CUE_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" pnpm release:cue
+CUE_ALLOW_ADHOC_RELEASE=1 pnpm release:cue
 pnpm version:check
 ```
 
-Release packaging requires a stable Apple Developer ID signature and verifies it before creating the archive. Ad hoc builds are rejected so a release cannot accidentally ship with a per-build identity. Apple also recommends notarizing Developer ID-signed apps distributed outside the Mac App Store; notarization is separate from Cue's Homebrew archive step.
+An ad hoc release has no verified Apple publisher identity and is not notarized. macOS may ask users to approve it before launch. To build a Developer ID-signed release instead, set `CUE_CODESIGN_IDENTITY` to your Developer ID Application identity and run `pnpm release:cue`.
+
+The release packager verifies either the Developer ID signature or the explicitly requested ad hoc signature before creating the archive. Apple recommends notarizing Developer ID-signed apps distributed outside the Mac App Store; notarization is separate from Cue's Homebrew archive step.
 
 This package currently supports Apple Silicon only. Commit and push the version, formula, and changelog changes. Install and authenticate [GitHub CLI](https://cli.github.com/) with `gh auth login`, then run:
 

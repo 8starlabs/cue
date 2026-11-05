@@ -30,6 +30,16 @@ If VS Code's integrated terminal is not using zsh, run **Terminal: Select Defaul
 
 If macOS asks for permission, allow Cue under **System Settings → Privacy & Security → Accessibility** so the popup can follow the caret.
 
+## Check your Cue version
+
+For a Homebrew installation, run:
+
+```sh
+brew list --versions cue
+```
+
+Homebrew prints the installed version, for example `cue 0.1.0`. To compare it with the latest version available from the tap, run `brew update` and then `brew info 8starlabs/cue/cue`. Cue does not currently have a `cue --version` command.
+
 Type a command such as `git ch` to see suggestions:
 
 <TerminalShowcase />

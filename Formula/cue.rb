@@ -3,7 +3,7 @@ class Cue < Formula
   homepage "https://github.com/8starlabs/cue"
   url "https://github.com/8starlabs/cue/releases/download/v0.1.0/cue-0.1.0-macos-arm64.tar.gz"
   version "0.1.0"
-  sha256 "009eb2e0ec58a6c2eadd3ff84c3c4ca2b7f650b5ff6f4dbca13f34691eaf3d6f"
+  sha256 "dcfc3d76496b07df10ed1817065b063709c30c17e03324abd37e9d6e0777249f"
 
   depends_on macos: :ventura
   depends_on arch: :arm64

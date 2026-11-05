@@ -20,17 +20,23 @@ Replace `0.2.0` with the version being released. The first release can use the v
 
 ## Build and validate the release
 
-Release archives must use the same stable Apple **Developer ID Application** identity across versions. Obtain a [Developer ID Application certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) and install it in your login keychain, then set its identity name while packaging. Ad hoc signatures are rejected because macOS ties their identity to a particular build, which can cause Accessibility permission to be requested again after an update.
+For public distribution, use the same Apple **Developer ID Application** identity across versions. Obtain a [Developer ID Application certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) and install it in your login keychain, then set its identity name while packaging. Apple also recommends notarizing apps distributed outside the Mac App Store.
 
-On an Apple Silicon Mac, run:
+If you do not have a Developer ID certificate yet, you can explicitly build an ad hoc signed release:
 
 ```sh
 pnpm changelog:check
-CUE_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" pnpm release:cue
+CUE_ALLOW_ADHOC_RELEASE=1 pnpm release:cue
 pnpm version:check
 ```
 
-`release:cue` builds `release-assets/cue-0.2.0-macos-arm64.tar.gz`, calculates its SHA-256, and writes that checksum into `Formula/cue.rb`. The formula, package versions, archive URL, and notes must agree before publishing.
+This archive has no verified Apple publisher identity and is not notarized; macOS may ask users to approve Cue before launch. To create a Developer ID-signed archive instead, set `CUE_CODESIGN_IDENTITY`:
+
+```sh
+CUE_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" pnpm release:cue
+```
+
+On an Apple Silicon Mac, either command builds `release-assets/cue-X.Y.Z-macos-arm64.tar.gz`, calculates its SHA-256, and writes the checksum into `Formula/cue.rb`. The formula, package versions, archive URL, and notes must agree before publishing.
 
 ## Publish on GitHub
 
@@ -46,4 +52,4 @@ After publication, the matching formula URL resolves to the attached asset. Home
 
 The release packager currently supports Apple Silicon only. Do not publish a release until the changelog, archive, formula checksum, and version checks all pass.
 
-When moving from an ad hoc development build to the first Developer ID-signed release, macOS may ask users to authorize Cue for Accessibility again once. Later releases signed with the same identity retain the app's code identity. See [Apple's code-signing requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) and [notarization guidance](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).
+When moving from an ad hoc build to a Developer ID-signed release, macOS may ask users to authorize Cue for Accessibility again once. Later releases signed with the same identity retain the app's code identity. See [Apple's code-signing requirements](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements) and [notarization guidance](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).

@@ -42,9 +42,9 @@ PLIST
 if [[ -n "${CUE_CODESIGN_IDENTITY:-}" ]]; then
   codesign --force --deep --options runtime --timestamp \
     --sign "$CUE_CODESIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
-elif [[ "${CUE_RELEASE_BUILD:-0}" == "1" ]]; then
-  echo "A stable Developer ID signature is required for release builds." >&2
-  echo "Set CUE_CODESIGN_IDENTITY to your Developer ID Application identity." >&2
+elif [[ "${CUE_RELEASE_BUILD:-0}" == "1" && "${CUE_ALLOW_ADHOC_RELEASE:-0}" != "1" ]]; then
+  echo "A Developer ID signature is recommended for release builds." >&2
+  echo "Set CUE_CODESIGN_IDENTITY, or explicitly allow an ad hoc build with CUE_ALLOW_ADHOC_RELEASE=1." >&2
   exit 1
 else
   # Keep a stable designated requirement across ad hoc development builds.
@@ -57,7 +57,7 @@ fi
 # When building interactively from Apple Terminal, replace the running app so
 # the next completion uses this build. Keep non-interactive/package builds free
 # of GUI side effects.
-if [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" ]]; then
+if [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" && "${CUE_RELEASE_BUILD:-0}" != "1" ]]; then
   /usr/bin/pkill -TERM -x Cue 2>/dev/null || true
   for _ in {1..20}; do
     /usr/bin/pgrep -x Cue >/dev/null || break
