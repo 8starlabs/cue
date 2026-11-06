@@ -1,9 +1,9 @@
 class Cue < Formula
   desc "IDE-style suggestions for Apple Terminal and VS Code"
   homepage "https://github.com/8starlabs/cue"
-  url "https://github.com/8starlabs/cue/releases/download/v0.1.1/cue-0.1.1-macos-arm64.tar.gz"
-  version "0.1.1"
-  sha256 "24b54ac5ff48454260cd1debc1456f463f17aebc4f676cb80e61a601e0824121"
+  url "https://github.com/8starlabs/cue/releases/download/v0.1.2/cue-0.1.2-macos-arm64.tar.gz"
+  version "0.1.2"
+  sha256 "50a7665f31b2c4d6aec91e129ce06fe60ddfe4e8b54cd567ee528f605da6a9ea"
 
   depends_on macos: :ventura
   depends_on arch: :arm64
