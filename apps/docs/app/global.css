@@ -947,7 +947,7 @@ html > body[data-scroll-locked] {
 }
 .home-footer {
   width: 100%;
-  margin: auto 0 0;
+  margin: 32px 0 0;
   color: var(--foreground);
   font-size: 13px;
 }
