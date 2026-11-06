@@ -502,16 +502,6 @@ function CueSearchPalette({
             className="cue-command-input"
             placeholder="Type a command or search…"
           />
-          {isLoading && (
-            <span
-              className="cue-command-loading"
-              role="status"
-              aria-label={`${loadingVerb} search results`}
-            >
-              <LoaderCircle aria-hidden="true" />
-              <span>{loadingVerb}…</span>
-            </span>
-          )}
           <SearchDialogClose className="cue-command-close">
             <Kbd className="cue-command-esc">esc</Kbd>
           </SearchDialogClose>
@@ -560,10 +550,15 @@ function CueSearchPalette({
               No matching pages or actions.
             </p>
           )}
-          {term && isLoading && searchRecords.length === 0 && (
-            <p className="cue-command-empty" role="status">
-              Searching documentation...
-            </p>
+          {term && isLoading && (
+            <div
+              className="cue-command-loading-row"
+              role="status"
+              aria-label={`${loadingVerb} search results`}
+            >
+              <LoaderCircle aria-hidden="true" />
+              <span>{loadingVerb}…</span>
+            </div>
           )}
         </div>
 

@@ -1463,22 +1463,19 @@ html > body[data-scroll-locked] {
   color: var(--muted-foreground);
   opacity: 0.86;
 }
-.cue-command-loading {
-  display: inline-flex;
-  flex: 0 0 auto;
+.cue-command-loading-row {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
+  margin: 4px 0;
+  min-height: 40px;
+  padding: 12px 8px;
   color: var(--cue-blue);
   font-size: 11px;
   white-space: nowrap;
 }
-.cue-command-loading > span {
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cue-command-loading svg {
+.cue-command-loading-row svg {
   width: 14px;
   height: 14px;
   animation: cue-search-spin 700ms linear infinite;
@@ -1489,7 +1486,7 @@ html > body[data-scroll-locked] {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cue-command-loading svg {
+  .cue-command-loading-row svg {
     animation-duration: 1600ms;
   }
 }

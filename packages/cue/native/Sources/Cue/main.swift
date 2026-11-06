@@ -41,6 +41,7 @@ struct RequestMetadata {
 }
 
 private let maximumVisibleSuggestions = 7
+private let maximumVisibleSuggestionsAboveCaret = 5
 private let maximumSuggestions = 50
 private let suggestionRowHeight: CGFloat = 18
 
@@ -398,13 +399,49 @@ final class CuePanelController {
             return nil
         }
 
-        guard panel.frame.height > position.availableHeight else { return position }
+        // Above-caret panels appear when the prompt is near the bottom of the
+        // terminal. Keep that first popup compact so it stays close to the
+        // caret without obscuring several lines of recent terminal output.
+        let preferredPlacement = preferredSide ?? position.side
+        if preferredPlacement == .aboveCaret,
+           visibleRowLimit > maximumVisibleSuggestionsAboveCaret {
+            updateVisibleRowLimit(maximumVisibleSuggestionsAboveCaret)
+            renderPanel()
+            guard let compactPosition = popupOrigin(
+                metadata: metadata,
+                panelSize: combinedPanelSize,
+                preferredSide: .aboveCaret
+            ) else {
+                return nil
+            }
+            position = compactPosition
+        }
 
-        // On a short display edge, reduce the number of visible rows instead
-        // of clamping the whole panel far away from the live caret.
-        let overflow = panel.frame.height - position.availableHeight
-        let rowsToRemove = max(1, Int(ceil(overflow / suggestionRowHeight)))
-        visibleRowLimit = max(1, visibleRowLimit - rowsToRemove)
+        // Layout can change slightly after SwiftUI applies the compact row
+        // count. Re-measure until the rendered panel fits the available area;
+        // a single pass left the initial popup too tall at the terminal edge.
+        for _ in 0..<maximumVisibleSuggestions {
+            let overflow = panel.frame.height - position.availableHeight
+            guard overflow > 0, visibleRowLimit > 1 else { break }
+
+            let rowsToRemove = max(1, Int(ceil(overflow / suggestionRowHeight)))
+            updateVisibleRowLimit(max(1, visibleRowLimit - rowsToRemove))
+            renderPanel()
+            guard let compactPosition = popupOrigin(
+                metadata: metadata,
+                panelSize: combinedPanelSize,
+                preferredSide: position.side
+            ) else {
+                return nil
+            }
+            position = compactPosition
+        }
+
+        return position
+    }
+
+    private func updateVisibleRowLimit(_ rowLimit: Int) {
+        visibleRowLimit = max(1, rowLimit)
         let displayCount = visibleCompletions.count + (hasAcceptedSelection ? 1 : 0)
         if selectedIndex < suggestionWindowStart {
             suggestionWindowStart = selectedIndex
@@ -412,16 +449,6 @@ final class CuePanelController {
             suggestionWindowStart = selectedIndex - visibleRowLimit + 1
         }
         suggestionWindowStart = min(suggestionWindowStart, max(0, displayCount - visibleRowLimit))
-        renderPanel()
-
-        if let compactPosition = popupOrigin(
-            metadata: metadata,
-            panelSize: combinedPanelSize,
-            preferredSide: preferredSide
-        ) {
-            position = compactPosition
-        }
-        return position
     }
 
     private func renderPanel() {
