@@ -41,6 +41,10 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
 
 For either installation method, macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility** so the popup can follow the terminal caret. See the [installation guide](https://cue.8starlabs.com/docs/install/install-cue) for setup details, updates, and removal.
 
+## See Cue in action
+
+<video src="https://raw.githubusercontent.com/8starlabs/cue/main/assets/cue-demo.mp4" controls muted playsinline width="100%"></video>
+
 ## Contributing
 
 See [CONTRIBUTION.md](CONTRIBUTION.md) for development setup, checks, and release instructions.
