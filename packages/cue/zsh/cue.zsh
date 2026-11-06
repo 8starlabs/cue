@@ -397,6 +397,30 @@ _cue_live_watch() {
   local old_buffer="$CUE_LIVE_LAST_BUFFER"
   local old_cursor="${CUE_LIVE_LAST_CURSOR:-0}"
   if [[ "$BUFFER" != "$CUE_LIVE_LAST_BUFFER" ]]; then
+    # Option-Delete can arrive as an Escape-prefixed sequence. If Terminal
+    # splits that sequence past KEYTIMEOUT, the backward-word widget may not
+    # run; still dismiss when the edit deletes back to the command/argument
+    # boundary instead of immediately reopening the same suggestions.
+    if [[ "$BUFFER" == "$old_buffer"* ]] \
+      && (( ${#BUFFER} < ${#old_buffer} && CURSOR == ${#BUFFER} )) \
+      && { [[ -z "$BUFFER" ]] || [[ "$BUFFER" == *[[:space:]] ]]; }; then
+      CUE_SELECTED_INDEX=0
+      CUE_SELECTED_VALUE=''
+      CUE_SELECTED_REPLACEMENT=''
+      CUE_SELECTION_BUFFER=''
+      CUE_SELECTION_CURSOR=''
+      CUE_DISMISSED_BUFFER="$BUFFER"
+      CUE_ACCEPTED_BUFFER=''
+      CUE_ENTER_DISMISS_BUFFER=''
+      CUE_SUPPRESS_UNTIL_SPACE=0
+      CUE_CURSOR_ROW=0
+      CUE_CURSOR_COLUMN=0
+      CUE_FORCE_CURSOR_QUERY=1
+      CUE_LIVE_LAST_BUFFER="$BUFFER"
+      CUE_LIVE_LAST_CURSOR="$CURSOR"
+      _cue_send_hide
+      return
+    fi
     if [[ -n "$CUE_ACCEPTED_BUFFER" && "$BUFFER" != "$CUE_ACCEPTED_BUFFER"* ]]; then
       CUE_SUPPRESS_UNTIL_SPACE=0
     fi

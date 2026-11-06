@@ -973,6 +973,7 @@ export async function complete(
   rootOverride?: FigSpec,
   environmentOverride?: Record<string, string>,
 ): Promise<Completion[]> {
+  if (isInsideQuotedGitCheckoutArgument(line)) return [];
   const parsed = parseLine(line);
   if (!parsed) return [];
   const shellEnvironment: Record<string, string | undefined> = {
@@ -1309,6 +1310,29 @@ export async function complete(
     ...visibleOptions,
     ...visible(additional, parsed.partial, "argument", spec.filterStrategy),
   ].slice(0, MAX_SUGGESTIONS);
+}
+
+function isInsideQuotedGitCheckoutArgument(line: string): boolean {
+  // An unfinished quoted value in `git checkout` is user-authored text. In
+  // particular, `-m` does not take a value, so branch/option completions must
+  // not replace the text the user is entering after it.
+  if (!/^\s*git\s+checkout(?:\s|$)/.test(line)) return false;
+
+  let quote: "'" | '"' | undefined;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === "\\" && quote !== "'") {
+      index += 1;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "'" || character === '"') quote = character;
+  }
+
+  return quote !== undefined;
 }
 
 async function loadDelegatedSpec(

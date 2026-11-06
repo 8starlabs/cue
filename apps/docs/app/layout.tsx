@@ -9,12 +9,25 @@ import "@fontsource-variable/jetbrains-mono";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://8starlabs.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://cue.8starlabs.com"),
   title: {
     default: "Cue — terminal autocomplete by 8StarLabs",
     template: "%s — Cue",
   },
   description: "IDE-style command suggestions for Apple Terminal and VS Code.",
+  openGraph: {
+    type: "website",
+    siteName: "Cue",
+    title: "Cue — terminal autocomplete by 8StarLabs",
+    description: "Free, open-source IDE-style autocomplete for Apple Terminal and VS Code.",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cue — terminal autocomplete by 8StarLabs",
+    description: "Free, open-source IDE-style autocomplete for Apple Terminal and VS Code.",
+    images: ["/twitter-image"],
+  },
 };
 
 export default function Layout({ children }: LayoutProps<"/">) {

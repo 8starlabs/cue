@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { changelogSource, source } from "@/lib/source";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://8starlabs.com";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://cue.8starlabs.com";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const entries = new Map<string, MetadataRoute.Sitemap[number]>();
