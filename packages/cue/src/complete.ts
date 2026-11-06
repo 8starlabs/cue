@@ -973,7 +973,7 @@ export async function complete(
   rootOverride?: FigSpec,
   environmentOverride?: Record<string, string>,
 ): Promise<Completion[]> {
-  if (isInsideQuotedGitCheckoutArgument(line)) return [];
+  if (isInsideQuotedArgument(line)) return [];
   const parsed = parseLine(line);
   if (!parsed) return [];
   const shellEnvironment: Record<string, string | undefined> = {
@@ -1312,12 +1312,9 @@ export async function complete(
   ].slice(0, MAX_SUGGESTIONS);
 }
 
-function isInsideQuotedGitCheckoutArgument(line: string): boolean {
-  // An unfinished quoted value in `git checkout` is user-authored text. In
-  // particular, `-m` does not take a value, so branch/option completions must
-  // not replace the text the user is entering after it.
-  if (!/^\s*git\s+checkout(?:\s|$)/.test(line)) return false;
-
+function isInsideQuotedArgument(line: string): boolean {
+  // Text inside an unfinished quoted shell argument belongs to the user.
+  // Do not replace it with command, option, or filepath suggestions.
   let quote: "'" | '"' | undefined;
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];

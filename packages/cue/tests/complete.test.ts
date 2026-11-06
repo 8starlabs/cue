@@ -218,7 +218,7 @@ describe("Fig-style completion specs", () => {
     );
   });
 
-  it("does not show git checkout suggestions inside an open quoted value", async () => {
+  it("does not show suggestions inside an open quoted argument", async () => {
     const spec: FigSpec = {
       name: "git",
       subcommands: [
@@ -227,14 +227,22 @@ describe("Fig-style completion specs", () => {
           options: [{ name: "-m" }],
           args: { suggestions: ["main", "main-dev"] },
         },
+        {
+          name: "commit",
+          options: [{ name: "-m", args: { name: "message" } }],
+          args: { template: "filepaths" },
+        },
       ],
     };
 
     await expect(complete('git checkout -m "', workspace, spec)).resolves.toEqual([]);
     await expect(complete('git checkout -m "e', workspace, spec)).resolves.toEqual([]);
+    await expect(complete('git commit -m "feat:', workspace, spec)).resolves.toEqual([]);
+    await expect(complete("git commit -m 'feat:", workspace, spec)).resolves.toEqual([]);
     expect((await complete("git checkout ma", workspace, spec)).map(({ name }) => name)).toContain(
       "main",
     );
+    expect((await complete('git commit -m "feat" ', workspace, spec)).length).toBeGreaterThan(0);
   });
 
   it("completes option values with spaces, equals, and declared separators", async () => {

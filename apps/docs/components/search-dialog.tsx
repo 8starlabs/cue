@@ -9,6 +9,7 @@ import {
   House,
   Keyboard,
   LifeBuoy,
+  LoaderCircle,
   Moon,
   Package,
   RefreshCw,
@@ -22,6 +23,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type KeyboardEvent,
 } from "react";
@@ -62,6 +64,195 @@ type ActionItem = Extract<SearchItemType, { type: "action" }> & {
   label: string;
   href?: string;
 };
+
+const searchingVerbs = [
+  "Accomplishing",
+  "Actioning",
+  "Actualizing",
+  "Architecting",
+  "Baking",
+  "Beaming",
+  "Beboppin'",
+  "Befuddling",
+  "Billowing",
+  "Blanching",
+  "Bloviating",
+  "Boogieing",
+  "Boondoggling",
+  "Booping",
+  "Bootstrapping",
+  "Brewing",
+  "Burrowing",
+  "Calculating",
+  "Canoodling",
+  "Caramelizing",
+  "Cascading",
+  "Catapulting",
+  "Cerebrating",
+  "Channelling",
+  "Choreographing",
+  "Churning",
+  "Clauding",
+  "Coalescing",
+  "Cogitating",
+  "Combobulating",
+  "Composing",
+  "Computing",
+  "Concocting",
+  "Considering",
+  "Contemplating",
+  "Cooking",
+  "Crafting",
+  "Creating",
+  "Crystallizing",
+  "Cultivating",
+  "Crunching",
+  "Deciphering",
+  "Deliberating",
+  "Determining",
+  "Dilly-dallying",
+  "Discombobulating",
+  "Doing",
+  "Doodling",
+  "Drizzling",
+  "Ebbing",
+  "Effecting",
+  "Elucidating",
+  "Embellishing",
+  "Enchanting",
+  "Envisioning",
+  "Evaporating",
+  "Fermenting",
+  "Fiddle-faddling",
+  "Finagling",
+  "Flambéing",
+  "Flibbertigibbeting",
+  "Flowing",
+  "Flummoxing",
+  "Fluttering",
+  "Forging",
+  "Forming",
+  "Frosting",
+  "Frolicking",
+  "Gallivanting",
+  "Galloping",
+  "Garnishing",
+  "Generating",
+  "Germinating",
+  "Gitifying",
+  "Grooving",
+  "Gusting",
+  "Harmonizing",
+  "Hashing",
+  "Hatching",
+  "Herding",
+  "Hibernating",
+  "Honking",
+  "Hullaballooing",
+  "Hyperspacing",
+  "Ideating",
+  "Imagining",
+  "Improvising",
+  "Incubating",
+  "Inferring",
+  "Infusing",
+  "Ionizing",
+  "Jitterbugging",
+  "Julienning",
+  "Kneading",
+  "Leavening",
+  "Levitating",
+  "Lollygagging",
+  "Manifesting",
+  "Marinating",
+  "Meandering",
+  "Metamorphosing",
+  "Misting",
+  "Moonwalking",
+  "Moseying",
+  "Mulling",
+  "Mustering",
+  "Musing",
+  "Nebulizing",
+  "Nesting",
+  "Noodling",
+  "Nucleating",
+  "Orbiting",
+  "Orchestrating",
+  "Osmosing",
+  "Perambulating",
+  "Percolating",
+  "Perusing",
+  "Philosophising",
+  "Photosynthesizing",
+  "Pollinating",
+  "Pontificating",
+  "Pondering",
+  "Pouncing",
+  "Precipitating",
+  "Prestidigitating",
+  "Processing",
+  "Proofing",
+  "Propagating",
+  "Puttering",
+  "Puzzling",
+  "Quantumizing",
+  "Razzle-dazzling",
+  "Razzmatazzing",
+  "Recombobulating",
+  "Reticulating",
+  "Roosting",
+  "Ruminating",
+  "Sautéing",
+  "Scampering",
+  "Scheming",
+  "Schlepping",
+  "Scurrying",
+  "Seasoning",
+  "Shenaniganing",
+  "Shimmying",
+  "Simmering",
+  "Skedaddling",
+  "Sketching",
+  "Slithering",
+  "Smooshing",
+  "Sock-hopping",
+  "Spelunking",
+  "Spinning",
+  "Sprouting",
+  "Stewing",
+  "Sublimating",
+  "Sussing",
+  "Swirling",
+  "Swooping",
+  "Symbioting",
+  "Synthesizing",
+  "Tempering",
+  "Thinking",
+  "Thundering",
+  "Tinkering",
+  "Tomfoolering",
+  "Topsy-turvying",
+  "Transfiguring",
+  "Transmuting",
+  "Twisting",
+  "Undulating",
+  "Unfurling",
+  "Unravelling",
+  "Vibing",
+  "Waddling",
+  "Wandering",
+  "Warping",
+  "Whatchamacalliting",
+  "Whirlpooling",
+  "Whirring",
+  "Whisking",
+  "Wibbling",
+  "Working",
+  "Wrangling",
+  "Zesting",
+  "Zigzagging",
+];
 
 const docLinks: Omit<Action, "icon" | "keywords">[] = [
   { id: "home", group: "Go to", label: "Home", href: "/" },
@@ -151,6 +342,14 @@ export function CueSearchDialog(props: DefaultSearchDialogProps) {
   const { open, onOpenChange, dialogHandle, api, delayMs } = props;
   const { locale } = useI18n();
   const searchState = useFetchSearch({ api, locale, delayMs });
+  const [loadingVerb, setLoadingVerb] = useState("");
+  const onSearchChange = useCallback(
+    (value: string) => {
+      setLoadingVerb(searchingVerbs[Math.floor(Math.random() * searchingVerbs.length)]);
+      searchState.onSearchChange(value);
+    },
+    [searchState.onSearchChange],
+  );
 
   return (
     <SearchDialog
@@ -158,7 +357,7 @@ export function CueSearchDialog(props: DefaultSearchDialogProps) {
       onOpenChange={onOpenChange}
       dialogHandle={dialogHandle}
       search={searchState.search}
-      onSearchChange={searchState.onSearchChange}
+      onSearchChange={onSearchChange}
       isLoading={searchState.isLoading}
       data={searchState.data}
       error={searchState.error}
@@ -170,6 +369,7 @@ export function CueSearchDialog(props: DefaultSearchDialogProps) {
           searchState.data?.query === searchState.search.trim() ? searchState.data.items : []
         }
         isLoading={searchState.isLoading}
+        loadingVerb={loadingVerb}
       />
     </SearchDialog>
   );
@@ -180,11 +380,13 @@ function CueSearchPalette({
   search,
   results,
   isLoading,
+  loadingVerb,
 }: {
   open: boolean;
   search: string;
   results: NonNullable<ReturnType<typeof useFetchSearch>["data"]>["items"];
   isLoading: boolean;
+  loadingVerb: string;
 }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
@@ -192,7 +394,6 @@ function CueSearchPalette({
   const activeId = useSyncExternalStore(subscribeActive, getActive, getActive);
   const wasOpen = useRef(false);
   const term = search.trim().toLocaleLowerCase();
-
   const actions = useMemo<ActionItem[]>(() => {
     const navigation = docLinks.map((link) => ({
       ...link,
@@ -301,6 +502,16 @@ function CueSearchPalette({
             className="cue-command-input"
             placeholder="Type a command or search…"
           />
+          {isLoading && (
+            <span
+              className="cue-command-loading"
+              role="status"
+              aria-label={`${loadingVerb} search results`}
+            >
+              <LoaderCircle aria-hidden="true" />
+              <span>{loadingVerb}…</span>
+            </span>
+          )}
           <SearchDialogClose className="cue-command-close">
             <Kbd className="cue-command-esc">esc</Kbd>
           </SearchDialogClose>

@@ -1463,6 +1463,36 @@ html > body[data-scroll-locked] {
   color: var(--muted-foreground);
   opacity: 0.86;
 }
+.cue-command-loading {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--cue-blue);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cue-command-loading > span {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cue-command-loading svg {
+  width: 14px;
+  height: 14px;
+  animation: cue-search-spin 700ms linear infinite;
+}
+@keyframes cue-search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cue-command-loading svg {
+    animation-duration: 1600ms;
+  }
+}
 #fd-search-dialog-content.cue-command-dialog .cue-command-close {
   display: inline-flex;
   width: auto;

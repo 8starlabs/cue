@@ -761,19 +761,29 @@ final class CuePanelController {
         let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
         let edgePadding: CGFloat = 8
         let maxOriginY = max(visible.minY + edgePadding, visible.maxY - panelSize.height - edgePadding)
+        // The popup is a separate native window, so display bounds alone are
+        // not enough: at the last row of a Terminal tab, "below" may be on the
+        // desktop or over another app. Prefer the active terminal's text
+        // viewport as the placement boundary, with the display as a fallback.
+        let terminalViewport = (isVSCode ? vscodeViewportRect : terminalGridRect)
+            .map { appKitRect(fromQuartz: $0, on: screen) }
         var side = PopupSide.constrained
         var availableHeight = max(0, visible.height - edgePadding * 2)
         if let belowCaretY, let aboveCaretY {
-            let availableBelow = max(0, belowCaretY - visible.minY - edgePadding - popupGap)
-            let availableAbove = max(0, visible.maxY - aboveCaretY - edgePadding - popupGap)
+            let lowerBoundary = max(visible.minY + edgePadding, terminalViewport?.minY ?? visible.minY)
+            let upperBoundary = min(visible.maxY - edgePadding, terminalViewport?.maxY ?? visible.maxY)
+            let availableBelow = max(0, belowCaretY - lowerBoundary - popupGap)
+            let availableAbove = max(0, upperBoundary - aboveCaretY - popupGap)
             let preferredAvailable = preferredSide == PopupSide.aboveCaret ? availableAbove : availableBelow
             // Prefer the familiar below-caret placement while it fits. Flip
             // above the caret at the bottom edge. During one live directory
-            // completion, retain its first side if there is room for at least
-            // one suggestion and compress the row count as needed.
+            // completion, retain its first side while the full panel still
+            // fits. If it no longer fits (for example, at the
+            // bottom of a Terminal tab), allow the popup to flip to the side
+            // with enough room instead of letting it spill outside the tab.
             side = if let preferredSide,
                       preferredSide != .constrained,
-                      preferredAvailable >= suggestionRowHeight + 4 {
+                      preferredAvailable >= panelSize.height {
                 preferredSide
             } else if availableBelow >= panelSize.height {
                 .belowCaret
@@ -1031,6 +1041,17 @@ final class CuePanelController {
         return CGPoint(
             x: appKitFrame.minX + point.x - quartzFrame.minX,
             y: appKitFrame.maxY - (point.y - quartzFrame.minY)
+        )
+    }
+
+    private func appKitRect(fromQuartz rect: CGRect, on screen: NSScreen?) -> CGRect {
+        let topLeft = appKitPoint(fromQuartz: CGPoint(x: rect.minX, y: rect.minY), on: screen)
+        let bottomRight = appKitPoint(fromQuartz: CGPoint(x: rect.maxX, y: rect.maxY), on: screen)
+        return CGRect(
+            x: min(topLeft.x, bottomRight.x),
+            y: min(topLeft.y, bottomRight.y),
+            width: abs(bottomRight.x - topLeft.x),
+            height: abs(bottomRight.y - topLeft.y)
         )
     }
 
