@@ -43,7 +43,9 @@ For either installation method, macOS may ask you to allow Cue under **System Se
 
 ## See Cue in action
 
-<video src="https://raw.githubusercontent.com/8starlabs/cue/main/assets/cue-demo.mp4" controls muted playsinline width="100%"></video>
+[![Watch Cue's terminal autocomplete demo](assets/cue-demo.gif)](assets/cue-demo.mp4)
+
+The preview plays automatically in GitHub. Select it to open the full MP4.
 
 ## Contributing
 
