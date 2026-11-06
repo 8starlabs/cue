@@ -1541,9 +1541,6 @@ html > body[data-scroll-locked] {
   line-height: 1.4;
   text-transform: uppercase;
 }
-.cue-command-group-title-docs {
-  padding-left: 28px;
-}
 .cue-command-dialog .cue-command-option[role="option"] {
   display: block;
   min-height: 0;

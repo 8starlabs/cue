@@ -563,9 +563,7 @@ function CueSearchPalette({
 
           {searchRecords.length > 0 && (
             <div className="cue-command-group" role="group" aria-label="Documentation results">
-              <p className="cue-command-group-title cue-command-group-title-docs">
-                Documentation results
-              </p>
+              <p className="cue-command-group-title">Documentation results</p>
               {searchRecords.map((item) => (
                 <SearchDialogListItem
                   item={item}
