@@ -338,14 +338,45 @@ const themes: Action[] = [
   },
 ];
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    if (typeof value === "string" && value.trim() === "") {
+      setDebouncedValue(value);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 export function CueSearchDialog(props: DefaultSearchDialogProps) {
   const { open, onOpenChange, dialogHandle, api, delayMs } = props;
   const { locale } = useI18n();
-  const searchState = useFetchSearch({ api, locale, delayMs });
+  const debounceMs = delayMs ?? 180;
+  const searchState = useFetchSearch({ api, locale, delayMs: debounceMs });
+  const settledSearch = useDebouncedValue(searchState.search, debounceMs);
+  const isSearchPending = searchState.search.trim() !== settledSearch.trim();
+  const isLoading =
+    isSearchPending ||
+    searchState.isLoading ||
+    (Boolean(settledSearch.trim()) && searchState.data?.query !== settledSearch.trim());
   const [loadingVerb, setLoadingVerb] = useState("");
+  const wasLoading = useRef(false);
+
+  useEffect(() => {
+    if (isLoading && !wasLoading.current) {
+      setLoadingVerb(searchingVerbs[Math.floor(Math.random() * searchingVerbs.length)]);
+    }
+    wasLoading.current = isLoading;
+  }, [isLoading]);
+
   const onSearchChange = useCallback(
     (value: string) => {
-      setLoadingVerb(searchingVerbs[Math.floor(Math.random() * searchingVerbs.length)]);
       searchState.onSearchChange(value);
     },
     [searchState.onSearchChange],
@@ -364,11 +395,10 @@ export function CueSearchDialog(props: DefaultSearchDialogProps) {
     >
       <CueSearchPalette
         open={open}
-        search={searchState.search}
-        results={
-          searchState.data?.query === searchState.search.trim() ? searchState.data.items : []
-        }
-        isLoading={searchState.isLoading}
+        search={settledSearch}
+        currentSearch={searchState.search}
+        results={searchState.data?.query === settledSearch.trim() ? searchState.data.items : []}
+        isLoading={isLoading}
         loadingVerb={loadingVerb}
       />
     </SearchDialog>
@@ -378,12 +408,14 @@ export function CueSearchDialog(props: DefaultSearchDialogProps) {
 function CueSearchPalette({
   open,
   search,
+  currentSearch,
   results,
   isLoading,
   loadingVerb,
 }: {
   open: boolean;
   search: string;
+  currentSearch: string;
   results: NonNullable<ReturnType<typeof useFetchSearch>["data"]>["items"];
   isLoading: boolean;
   loadingVerb: string;
@@ -541,7 +573,7 @@ function CueSearchPalette({
                   onClick={() => onSelect(item)}
                   className="cue-command-option cue-command-result"
                 >
-                  <SearchResultRow item={item} />
+                  <SearchResultRow item={item} search={search} />
                 </SearchDialogListItem>
               ))}
             </div>
@@ -552,7 +584,7 @@ function CueSearchPalette({
               No matching pages or actions.
             </p>
           )}
-          {term && isLoading && (
+          {(term || currentSearch.trim()) && isLoading && (
             <div
               className="cue-command-loading-row"
               role="status"
@@ -586,8 +618,8 @@ function CueSearchPalette({
   );
 }
 
-function SearchResultRow({ item }: { item: SearchResultRecord }) {
-  const { query } = useSearch();
+function SearchResultRow({ item, search }: { item: SearchResultRecord; search: string }) {
+  const query = search;
   const highlightRef = useHighlightRef(query);
   const IconComponent = iconForSearchUrl(item.url);
   const { title, body } = extractSearchContent(item.hastContent);
