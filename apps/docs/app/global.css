@@ -1471,7 +1471,7 @@ html > body[data-scroll-locked] {
   margin: 4px 0;
   min-height: 40px;
   padding: 12px 8px;
-  color: var(--cue-blue);
+  color: var(--muted-foreground);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1540,6 +1540,9 @@ html > body[data-scroll-locked] {
   letter-spacing: 0.12em;
   line-height: 1.4;
   text-transform: uppercase;
+}
+.cue-command-group-title-docs {
+  padding-left: 28px;
 }
 .cue-command-dialog .cue-command-option[role="option"] {
   display: block;

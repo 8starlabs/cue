@@ -733,6 +733,29 @@ final class CuePanelController {
             return caret
         }
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
+        let terminalDSRAnchor: (point: CGPoint, cellWidth: CGFloat, cellHeight: CGFloat)? = {
+            guard !isVSCode,
+                  metadata.terminalRow > 0,
+                  let textRect = terminalGridRect else { return nil }
+
+            let cellWidth = textRect.width / CGFloat(columns)
+            let cellHeight = textRect.height / CGFloat(lines)
+            let logicalColumn = min(columns - 1, max(0, absoluteColumn % columns))
+            let reportedColumn = metadata.terminalColumn > 0
+                ? min(columns - 1, max(0, metadata.terminalColumn - 1))
+                : logicalColumn
+            let columnDistance = min(
+                abs(reportedColumn - logicalColumn),
+                columns - abs(reportedColumn - logicalColumn)
+            )
+            let terminalColumn = columnDistance <= 2 ? reportedColumn : logicalColumn
+            let terminalRow = min(lines - 1, max(0, metadata.terminalRow - 1))
+            let point = appKitPoint(fromQuartz: CGPoint(
+                x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
+                y: textRect.minY + CGFloat(terminalRow + 1) * cellHeight
+            ), on: screen)
+            return (point, cellWidth, cellHeight)
+        }()
         var x: CGFloat
         var y: CGFloat
         var caretAnchorX: CGFloat?
@@ -747,11 +770,28 @@ final class CuePanelController {
             // active tab and the actual visible insertion point.
             let lowerEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.maxY), on: screen)
             let upperEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.minY), on: screen)
-            x = lowerEdge.x
-            caretAnchorX = lowerEdge.x
-            belowCaretY = lowerEdge.y
-            aboveCaretY = upperEdge.y
-            y = lowerEdge.y - panelSize.height - popupGap
+            let accessibilityCenterY = (lowerEdge.y + upperEdge.y) / 2
+            let dsrIsMoreCurrent = terminalDSRAnchor.map { anchor in
+                abs(accessibilityCenterY - (anchor.point.y + anchor.cellHeight / 2)) >
+                    max(8, anchor.cellHeight * 1.25)
+            } ?? false
+            if dsrIsMoreCurrent, let anchor = terminalDSRAnchor {
+                // When scrollback fills the viewport, Terminal may keep an
+                // AX text-range caret in an older visible row. DSR tracks the
+                // live shell cursor, so prefer it when the two disagree by
+                // more than one terminal row.
+                x = anchor.point.x
+                caretAnchorX = anchor.point.x
+                belowCaretY = anchor.point.y
+                aboveCaretY = anchor.point.y + anchor.cellHeight
+                y = anchor.point.y - panelSize.height - popupGap
+            } else {
+                x = lowerEdge.x
+                caretAnchorX = lowerEdge.x
+                belowCaretY = lowerEdge.y
+                aboveCaretY = upperEdge.y
+                y = lowerEdge.y - panelSize.height - popupGap
+            }
         } else if metadata.terminalRow > 0, let textRect = terminalGridRect {
             // Fall back to the shell's live DSR grid position only when
             // Terminal does not provide a valid Accessibility caret.

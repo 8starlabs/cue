@@ -5,10 +5,10 @@ import {
   BookOpen,
   Braces,
   Check,
+  CircleHelp,
   FileText,
   House,
   Keyboard,
-  LifeBuoy,
   LoaderCircle,
   Moon,
   Package,
@@ -292,7 +292,7 @@ const docIcons: Record<string, Icon> = {
   "keyboard-controls": Keyboard,
   completions: Sparkles,
   "fig-spec-support": Braces,
-  troubleshooting: LifeBuoy,
+  troubleshooting: CircleHelp,
   releasing: FileText,
   changelogs: FileText,
 };
@@ -531,7 +531,9 @@ function CueSearchPalette({
 
           {searchRecords.length > 0 && (
             <div className="cue-command-group" role="group" aria-label="Documentation results">
-              <p className="cue-command-group-title">Documentation results</p>
+              <p className="cue-command-group-title cue-command-group-title-docs">
+                Documentation results
+              </p>
               {searchRecords.map((item) => (
                 <SearchDialogListItem
                   item={item}
