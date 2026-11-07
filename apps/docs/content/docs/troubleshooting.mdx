@@ -21,7 +21,7 @@ Cue hides the popup when the latest completion result is empty. If the old panel
 
 Cue anchors the popup to Apple Terminal’s live caret. In VS Code, it combines the zsh cursor position with the integrated terminal viewport. Verify Cue remains enabled under **System Settings → Privacy & Security → Accessibility** and that the integrated terminal is focused. If the position is still wrong, include a screenshot, macOS display scaling, and your monitor arrangement when reporting it.
 
-## Tab prints text into the terminal
+## Tab does nothing or prints a completion list
 
 Reload the current shell integration:
 
@@ -29,7 +29,11 @@ Reload the current shell integration:
 source "$PWD/packages/cue/zsh/cue.zsh"
 ```
 
-Cue binds Tab to the native suggestion selection flow. Another plugin loaded afterward may replace that key binding.
+Cue inserts its selected suggestion with Tab. When Cue has no suggestion, Tab falls back to the zsh or completion-plugin binding that was active when Cue loaded. Source Cue after `compinit` and other completion plugins so it can preserve those bindings.
+
+## Escape does not switch vi mode
+
+In vi insert mode, Escape dismisses Cue and then runs the original vi-mode Escape widget, which normally switches to command mode. Cue only shortens zsh's default `KEYTIMEOUT`; a custom value is kept. If you set `KEYTIMEOUT` after sourcing Cue, that value also takes effect.
 
 ## The suggestion doesn’t match the installed command
 

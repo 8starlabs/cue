@@ -7,14 +7,14 @@ import { KeyboardActionShowcase } from "@/components/terminal-showcase";
 
 Suggestions appear as you type. Cue keeps keyboard focus in your terminal and hides the popup when the terminal loses focus or you press Escape.
 
-| Key       | Action                                                                |
-| --------- | --------------------------------------------------------------------- |
-| `↑` / `↓` | Move through the list.                                                |
-| `Enter`   | Insert the selected suggestion. Press Enter again to run the command. |
-| `Space`   | Begin the next argument.                                              |
-| `Tab`     | Insert the selected suggestion.                                       |
-| `Esc`     | Dismiss suggestions until the input changes.                          |
-| `⌘I`      | Move the description beside the list or below it.                     |
+| Key       | Action                                                                                   |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `↑` / `↓` | Move through the list.                                                                   |
+| `Enter`   | Insert the selected suggestion. Press Enter again to run the command.                    |
+| `Space`   | Begin the next argument.                                                                 |
+| `Tab`     | Insert the selected suggestion, or use zsh's original completion when Cue has no result. |
+| `Esc`     | Dismiss suggestions until the input changes. In vi insert mode, also enter command mode. |
+| `⌘I`      | Move the description beside the list or below it.                                        |
 
 For `cd`, accept a folder to browse its contents, then press Enter again to change into it. Cue offers one `../` entry per parent level.
 

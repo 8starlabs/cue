@@ -8,9 +8,44 @@ if [[ -d "${CUE_HOME}/packages/cue" && -f "${CUE_HOME}/packages/cue/package.json
   CUE_HOME="${CUE_HOME}/packages/cue"
 fi
 
-# Escape is a prefix for arrow and Meta-key sequences in zsh. Keep the wait
-# short for quick dismissal, but long enough to recognize Option-Backspace.
-typeset -g KEYTIMEOUT=8
+# Escape is a prefix for arrow and Meta-key sequences in zsh. Use Cue's short
+# default only when zsh still has its stock value; keep a user's custom value.
+# (zsh initializes this special parameter to 40, so an explicitly chosen 40
+# cannot be distinguished from the default.)
+(( KEYTIMEOUT == 40 )) && KEYTIMEOUT=8
+
+# Preserve the completion widgets that were active before Cue. This lets Tab
+# fall back to zsh or an earlier completion plugin whenever Cue has no result.
+typeset -g CUE_ORIG_TAB_EMACS_WIDGET="${CUE_ORIG_TAB_EMACS_WIDGET:-}"
+typeset -g CUE_ORIG_TAB_VIINS_WIDGET="${CUE_ORIG_TAB_VIINS_WIDGET:-}"
+typeset -g CUE_ORIG_VI_ESCAPE_WIDGET="${CUE_ORIG_VI_ESCAPE_WIDGET:-}"
+_cue_bound_widget() {
+  local binding
+  binding="$(bindkey -M "$1" "$2" 2>/dev/null)"
+  REPLY="${binding##* }"
+}
+_cue_bound_widget emacs '^I'
+if [[ "$REPLY" == cue_tab_widget || -z "$REPLY" ]]; then
+  [[ -n "$CUE_ORIG_TAB_EMACS_WIDGET" ]] || CUE_ORIG_TAB_EMACS_WIDGET=expand-or-complete
+else
+  CUE_ORIG_TAB_EMACS_WIDGET="$REPLY"
+fi
+_cue_bound_widget viins '^I'
+if [[ "$REPLY" == cue_tab_widget || "$REPLY" == cue_viins_tab_widget || -z "$REPLY" ]]; then
+  [[ -n "$CUE_ORIG_TAB_VIINS_WIDGET" ]] || CUE_ORIG_TAB_VIINS_WIDGET=expand-or-complete
+else
+  CUE_ORIG_TAB_VIINS_WIDGET="$REPLY"
+fi
+_cue_bound_widget viins '^['
+if [[ "$REPLY" == cue_vi_escape_widget || -z "$REPLY" ]]; then
+  [[ -n "$CUE_ORIG_VI_ESCAPE_WIDGET" ]] || CUE_ORIG_VI_ESCAPE_WIDGET=vi-cmd-mode
+elif [[ "$REPLY" == cue_dismiss_widget ]]; then
+  # Recover gracefully when re-sourcing over an older Cue binding.
+  CUE_ORIG_VI_ESCAPE_WIDGET=vi-cmd-mode
+else
+  CUE_ORIG_VI_ESCAPE_WIDGET="$REPLY"
+fi
+unfunction _cue_bound_widget
 
 typeset -gi CUE_SELECTED_INDEX=0
 typeset -g CUE_SELECTED_VALUE=''
@@ -207,6 +242,14 @@ _cue_dismiss_widget() {
 }
 zle -N cue_dismiss_widget _cue_dismiss_widget
 
+# In vi insert mode, Escape should both dismiss Cue and retain the shell's
+# original Escape behavior (normally switching to command mode).
+_cue_vi_escape_widget() {
+  _cue_dismiss_widget
+  [[ -n "$CUE_ORIG_VI_ESCAPE_WIDGET" ]] && zle "$CUE_ORIG_VI_ESCAPE_WIDGET"
+}
+zle -N cue_vi_escape_widget _cue_vi_escape_widget
+
 _cue_backward_kill_word_widget() {
   zle .backward-kill-word
   CUE_SELECTED_INDEX=0
@@ -229,7 +272,7 @@ bindkey '^[' cue_dismiss_widget
 bindkey -M emacs '^[' cue_dismiss_widget
 bindkey -M emacs '^[^?' cue_backward_kill_word_widget
 bindkey -M emacs '^[^H' cue_backward_kill_word_widget
-bindkey -M viins '^[' cue_dismiss_widget
+bindkey -M viins '^[' cue_vi_escape_widget
 bindkey -M viins '^[^?' cue_backward_kill_word_widget
 bindkey -M viins '^[^H' cue_backward_kill_word_widget
 bindkey '^[^?' cue_backward_kill_word_widget
@@ -353,9 +396,16 @@ _cue_complete_selection() {
   return 0
 }
 
-_cue_tab_widget() { _cue_complete_selection }
+_cue_tab_widget() {
+  _cue_complete_selection || zle "$CUE_ORIG_TAB_EMACS_WIDGET"
+}
+_cue_viins_tab_widget() {
+  _cue_complete_selection || zle "$CUE_ORIG_TAB_VIINS_WIDGET"
+}
 zle -N cue_tab_widget _cue_tab_widget
-bindkey '^I' cue_tab_widget
+zle -N cue_viins_tab_widget _cue_viins_tab_widget
+bindkey -M emacs '^I' cue_tab_widget
+bindkey -M viins '^I' cue_viins_tab_widget
 
 _cue_accept_widget() {
   if [[ -n "$CUE_ACCEPTED_BUFFER" && "$BUFFER" == "$CUE_ACCEPTED_BUFFER" ]]; then

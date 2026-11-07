@@ -1,0 +1,14 @@
+---
+title: Cue 0.1.5
+description: Preserve native zsh keyboard behavior when Cue has no completion.
+version: "0.1.5"
+date: "2026-11-07"
+---
+
+## Fixed
+
+- Tab now falls back to the active zsh completion widget when Cue has no suggestion.
+- Escape dismisses Cue while preserving vi insert mode’s normal switch to command mode.
+- Cue keeps a custom `KEYTIMEOUT` instead of overwriting it during startup.
+
+Thanks to [Ducksss](https://github.com/Ducksss) for reporting the Tab fallback and vi-mode keyboard issues in [#2](https://github.com/8starlabs/cue/issues/2) and [#3](https://github.com/8starlabs/cue/issues/3).
