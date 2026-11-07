@@ -1,5 +1,7 @@
 # Cue
 
+[![GitHub release downloads](https://img.shields.io/github/downloads/8starlabs/cue/total?label=release%20downloads&logo=github)](https://github.com/8starlabs/cue/releases)
+
 ![Cue terminal autocomplete](assets/social/cue-readme.png)
 
 IDE-style command and path suggestions for Apple Terminal and the VS Code integrated terminal.
