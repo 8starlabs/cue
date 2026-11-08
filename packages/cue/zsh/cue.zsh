@@ -419,9 +419,12 @@ _cue_accept_widget() {
     _cue_dismiss_widget
     return
   fi
-  if _cue_complete_selection; then
+  local previous_buffer="$BUFFER" previous_cursor="$CURSOR"
+  if _cue_complete_selection && [[ "$BUFFER" != "$previous_buffer" || "$CURSOR" != "$previous_cursor" ]]; then
     return
   fi
+  CUE_ACCEPTED_BUFFER=''
+  CUE_ENTER_DISMISS_BUFFER=''
   CUE_DISMISSED_BUFFER="$BUFFER"
   _cue_send_hide
   zle .accept-line
