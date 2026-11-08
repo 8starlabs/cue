@@ -809,7 +809,11 @@ final class CuePanelController {
             let upperEdge = appKitPoint(fromQuartz: CGPoint(x: caret.minX, y: caret.minY), on: screen)
             let accessibilityCenterY = (lowerEdge.y + upperEdge.y) / 2
             let dsrIsMoreCurrent = terminalDSRAnchor.map { anchor in
-                abs(accessibilityCenterY - (anchor.point.y + anchor.cellHeight / 2)) >
+                // VS Code's xterm Accessibility caret can report a stale
+                // column even while its row looks current. When DSR returned a
+                // live terminal position, use it for both coordinates.
+                if isVSCode { return true }
+                return abs(accessibilityCenterY - (anchor.point.y + anchor.cellHeight / 2)) >
                     max(8, anchor.cellHeight * 1.25)
             } ?? false
             if dsrIsMoreCurrent, let anchor = terminalDSRAnchor {
@@ -830,8 +834,8 @@ final class CuePanelController {
                 y = lowerEdge.y - panelSize.height - popupGap
             }
         } else if metadata.terminalRow > 0, let textRect = terminalGridRect {
-            // Fall back to the shell's live DSR grid position only when
-            // Terminal does not provide a valid Accessibility caret.
+            // Use the shell's live DSR grid position when there is no
+            // Accessibility caret, or when VS Code's xterm caret is stale.
             let cellWidth = textRect.width / CGFloat(columns)
             let cellHeight = textRect.height / CGFloat(lines)
             let logicalColumn = min(columns - 1, max(0, absoluteColumn % columns))
