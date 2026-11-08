@@ -3,13 +3,18 @@ title: Update Cue
 description: Install a newer Cue release with Homebrew.
 ---
 
-From zsh, run `cue-update` to refresh Homebrew and Cue together:
+In a zsh terminal, run:
 
 ```sh
 cue-update
 ```
 
-For the first update from Cue 0.1.8 or earlier, run this once. Those releases don't include the `cue-update` command yet:
+This updates Homebrew and Cue, restarts Cue, and refreshes the integration in the current terminal. Run it whenever you want to install the latest published release.
+
+<details>
+<summary>Updating from Cue 0.1.8 or earlier</summary>
+
+Older releases don't include `cue-update`. Run this one-time update in zsh:
 
 ```sh
 brew update && brew upgrade 8starlabs/cue/cue && \
@@ -18,8 +23,15 @@ brew update && brew upgrade 8starlabs/cue/cue && \
   source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"
 ```
 
-The update helper stops Cue app and worker processes owned by your macOS account, removes their stale socket and cache, then reloads the integration in the current shell. Sourcing it starts the updated app. It leaves other accounts' Cue processes alone and never removes the instance lock file. New terminal sessions use Homebrew's stable `opt/cue` path automatically.
+</details>
 
-Cue does not update itself in the background. Run `cue-update` when you want to install a published release. To confirm the installed version, run `brew list --versions cue`.
+<details>
+<summary>Check your installed version</summary>
+
+```sh
+brew list --versions cue
+```
+
+</details>
 
 See [Install Cue](/docs/install/install-cue) for setup, or [Uninstall Cue](/docs/install/uninstall) to remove it.
