@@ -1407,6 +1407,32 @@ html > body[data-scroll-locked] {
   font-size: 16px;
   line-height: 1.6;
 }
+.changelog-latest-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+  padding: 13px 15px;
+  border: 1px solid var(--cue-line);
+  border-radius: 10px;
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+.changelog-latest-link:hover {
+  border-color: color-mix(in srgb, var(--cue-blue) 48%, var(--cue-line));
+  background: color-mix(in srgb, var(--cue-blue) 5%, transparent);
+}
+.changelog-latest-link > span:nth-child(2) {
+  flex: 1;
+}
+.changelog-latest-link > svg {
+  color: var(--cue-blue);
+}
 
 /* Cue's Cmd+K palette, adapted from the Canopy command menu. */
 #fd-search-dialog-content.cue-command-dialog {

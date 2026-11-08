@@ -1,0 +1,11 @@
+---
+title: Cue 0.1.7
+description: Keep VS Code terminal suggestions visible when cursor coordinates are unavailable.
+version: "0.1.7"
+date: "2026-11-08"
+---
+
+## Fixed
+
+- Keep the autocomplete popup visible in VS Code when neither Accessibility nor the terminal cursor report provides a caret position. Cue anchors it to the terminal viewport as a fallback, and continues to prefer live caret coordinates when available.
+- Use VS Code's terminal cursor report to correct stale Accessibility caret positions when both are available.

@@ -46,28 +46,39 @@ export default function ChangelogPage() {
       <p className="changelog-kicker">Release notes</p>
       <h1>Changelog</h1>
       <p className="changelog-intro">
-        What changed in Cue, version by version. Each entry is published with its matching GitHub
-        release.
+        What changed in Cue, version by version. The latest release is linked below; each entry is
+        also published with its matching GitHub release.
       </p>
 
       {pages.length > 0 ? (
-        <ol className="changelog-list">
-          {pages.map((page) => (
-            <li className="changelog-list-item" key={page.url}>
-              <Link className="changelog-list-link" href={page.url}>
-                <div className="changelog-list-meta">
-                  <span className="changelog-version">v{page.data.version}</span>
-                  <time dateTime={page.data.date}>
-                    {dateFormat.format(new Date(`${page.data.date}T00:00:00Z`))}
-                  </time>
-                </div>
-                <h2 className="changelog-list-title">{page.data.title}</h2>
-                <p className="changelog-list-description">{page.data.description}</p>
-                <ArrowRight className="changelog-list-arrow" size={18} aria-hidden="true" />
-              </Link>
-            </li>
-          ))}
-        </ol>
+        <>
+          <Link
+            className="changelog-latest-link"
+            href={pages[0].url}
+            aria-label={`Read the latest release notes: ${pages[0].data.title}`}
+          >
+            <span className="changelog-version">Latest · v{pages[0].data.version}</span>
+            <span>{pages[0].data.title}</span>
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+          <ol className="changelog-list">
+            {pages.map((page) => (
+              <li className="changelog-list-item" key={page.url}>
+                <Link className="changelog-list-link" href={page.url}>
+                  <div className="changelog-list-meta">
+                    <span className="changelog-version">v{page.data.version}</span>
+                    <time dateTime={page.data.date}>
+                      {dateFormat.format(new Date(`${page.data.date}T00:00:00Z`))}
+                    </time>
+                  </div>
+                  <h2 className="changelog-list-title">{page.data.title}</h2>
+                  <p className="changelog-list-description">{page.data.description}</p>
+                  <ArrowRight className="changelog-list-arrow" size={18} aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </>
       ) : (
         <section className="changelog-empty" aria-live="polite">
           <h2>The first release notes are on their way.</h2>

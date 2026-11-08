@@ -734,8 +734,7 @@ final class CuePanelController {
         }
         let absoluteColumn = max(0, metadata.promptWidth + metadata.cursor)
         let terminalDSRAnchor: (point: CGPoint, cellWidth: CGFloat, cellHeight: CGFloat)? = {
-            guard !isVSCode,
-                  metadata.terminalRow > 0,
+            guard metadata.terminalRow > 0,
                   let textRect = terminalGridRect else { return nil }
 
             let cellWidth = textRect.width / CGFloat(columns)
@@ -815,6 +814,24 @@ final class CuePanelController {
             let terminalAnchor = appKitPoint(fromQuartz: CGPoint(
                 x: textRect.minX + CGFloat(terminalColumn) * cellWidth,
                 y: textRect.minY + CGFloat(terminalRow + 1) * cellHeight
+            ), on: screen)
+            x = terminalAnchor.x
+            caretAnchorX = terminalAnchor.x
+            belowCaretY = terminalAnchor.y
+            aboveCaretY = terminalAnchor.y + cellHeight
+            y = terminalAnchor.y - panelSize.height - popupGap
+        } else if isVSCode, let textRect = vscodeViewportRect {
+            // VS Code sometimes accepts the shell's DSR query without
+            // returning a cursor row, and its focused xterm textarea may not
+            // expose an Accessibility text range. Keep completions visible in
+            // that case by anchoring to the last visible terminal row. Prefer
+            // exact AX/DSR coordinates above whenever they are available.
+            let cellWidth = textRect.width / CGFloat(columns)
+            let cellHeight = textRect.height / CGFloat(lines)
+            let logicalColumn = min(columns - 1, max(0, absoluteColumn % columns))
+            let terminalAnchor = appKitPoint(fromQuartz: CGPoint(
+                x: textRect.minX + CGFloat(logicalColumn) * cellWidth,
+                y: textRect.maxY
             ), on: screen)
             x = terminalAnchor.x
             caretAnchorX = terminalAnchor.x
