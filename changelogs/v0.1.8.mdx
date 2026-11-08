@@ -1,0 +1,13 @@
+---
+title: Cue 0.1.8
+description: Restore popup visibility in the VS Code integrated terminal.
+version: "0.1.8"
+date: "2026-11-09"
+---
+
+## Fixed
+
+- Keep suggestions visible in VS Code when its accessibility focus moves between terminal elements, and find the terminal viewport when caret coordinates are unavailable.
+- Avoid hiding the popup for small accessibility frame changes and prevent multiple Cue builds from competing for the completion socket.
+
+Thanks to [@chaw678](https://github.com/chaw678) for reporting and investigating [issue #5](https://github.com/8starlabs/cue/issues/5).

@@ -5,6 +5,22 @@ import Carbon.HIToolbox
 import SwiftUI
 import Darwin
 
+// Development and Homebrew builds share the same per-user completion socket.
+// Keep only one Cue process alive so a second build cannot unlink the first
+// process's socket and silently take over completion requests.
+private var cueInstanceLockDescriptor: Int32 = -1
+
+private func acquireCueInstanceLock() {
+    let lockPath = "/tmp/cue-\(getuid()).lock"
+    let descriptor = open(lockPath, O_CREAT | O_RDWR, mode_t(0o600))
+    guard descriptor >= 0 else { exit(EXIT_FAILURE) }
+    guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+        close(descriptor)
+        exit(EXIT_SUCCESS)
+    }
+    cueInstanceLockDescriptor = descriptor
+}
+
 struct Completion: Decodable, Identifiable {
     let name: String
     let displayName: String?
@@ -100,6 +116,7 @@ final class CueModel: ObservableObject {
 @main
 struct CueMain {
     static func main() {
+        acquireCueInstanceLock()
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let delegate = CueAppDelegate()
@@ -138,7 +155,6 @@ final class CuePanelController {
     private var directoryPopupAnchor: DirectoryPopupAnchor?
     private var activeVisibleFrame: CGRect?
     private var terminalWindowRect: CGRect?
-    private var activeTerminalFocusedElement: AXUIElement?
     private var activeTerminalProcessIdentifier: pid_t?
     private var latestMetadata: RequestMetadata?
     private var descriptionAtBottom = true
@@ -203,7 +219,6 @@ final class CuePanelController {
             return
         }
         activeTerminalProcessIdentifier = frontmostApplication?.processIdentifier
-        activeTerminalFocusedElement = focusedUIElement(for: frontmostApplication?.processIdentifier)
 
         let previousMetadata = latestMetadata
         let previousWindowRect = terminalWindowRect
@@ -352,17 +367,37 @@ final class CuePanelController {
         terminalWindowRect = nil
         activeVisibleFrame = nil
         latestMetadata = nil
-        activeTerminalFocusedElement = nil
         activeTerminalProcessIdentifier = nil
         unregisterLayoutHotKey()
     }
 
     func isActiveTerminal(_ application: NSRunningApplication) -> Bool {
         guard activeTerminalProcessIdentifier == application.processIdentifier else { return false }
-        guard TerminalHost.isVSCode(application.bundleIdentifier),
-              let previousFocus = activeTerminalFocusedElement,
-              let currentFocus = focusedUIElement(for: application.processIdentifier) else { return true }
-        return CFEqual(previousFocus, currentFocus)
+        guard TerminalHost.isVSCode(application.bundleIdentifier) else { return true }
+        // VS Code's accessibility focus often alternates between xterm's
+        // hidden input and its terminal container. These are different AX
+        // objects (and can have different bounds) even though the terminal
+        // still owns keyboard focus. Treat any focused element inside a
+        // terminal subtree as active; only dismiss when focus is explicitly
+        // somewhere outside the terminal.
+        guard let currentFocus = focusedUIElement(for: application.processIdentifier) else { return true }
+        return isVSCodeTerminalFocus(currentFocus)
+    }
+
+    private func isVSCodeTerminalFocus(_ focusedElement: AXUIElement) -> Bool {
+        var element = focusedElement
+        var visited = 0
+        while visited < 12 {
+            visited += 1
+            let label = vscodeAccessibilityLabel(for: element)
+            if label.contains("terminal") || label.contains("xterm") { return true }
+
+            var parentValue: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentValue) == .success,
+                  let parentValue else { break }
+            element = unsafeBitCast(parentValue, to: AXUIElement.self)
+        }
+        return false
     }
 
     func select(_ index: Int) {
@@ -672,7 +707,8 @@ final class CuePanelController {
         if isVSCode {
             vscodeViewportRect = vscodeTerminalViewportRect(
                 around: focusedElement,
-                windowRect: axWindowRect
+                in: windowElement ?? app,
+                windowRect: windowRect
             )
             if textRect == nil { textRect = vscodeViewportRect }
         } else if caretRect == nil || textRect == nil,
@@ -1012,37 +1048,93 @@ final class CuePanelController {
         return firstTextElement
     }
 
-    private func vscodeTerminalViewportRect(around focusedElement: AXUIElement?, windowRect: CGRect?) -> CGRect? {
-        guard var element = focusedElement else { return nil }
-        var firstViewport: CGRect?
-        var visited = 0
+    private func vscodeTerminalViewportRect(
+        around focusedElement: AXUIElement?,
+        in root: AXUIElement,
+        windowRect: CGRect?
+    ) -> CGRect? {
+        var focusedViewport: CGRect?
+        if var element = focusedElement {
+            var visited = 0
+            while visited < 12 {
+                visited += 1
+                if let rect = axRect(element), isPlausibleVSCodeTerminalRect(rect, inside: windowRect) {
+                    let fillsWindow = windowRect.map {
+                        rect.width >= $0.width * 0.98 && rect.height >= $0.height * 0.84
+                    } ?? false
+                    if !fillsWindow {
+                        if focusedViewport == nil { focusedViewport = rect }
+                        let label = vscodeAccessibilityLabel(for: element)
+                        if label.contains("terminal") { return rect }
+                    }
+                }
 
-        while visited < 10 {
+                var parentValue: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentValue) == .success,
+                      let parentValue else { break }
+                element = unsafeBitCast(parentValue, to: AXUIElement.self)
+            }
+        }
+        if let focusedViewport { return focusedViewport }
+
+        // VS Code sometimes returns no focused AX element for its terminal
+        // (or returns an xterm textarea whose ancestors do not carry useful
+        // bounds). Search the active window's tree as well, preferring a
+        // viewport explicitly labelled as Terminal.
+        var pending: [(element: AXUIElement, depth: Int)] = [(root, 0)]
+        var nextIndex = 0
+        var visited = 0
+        while nextIndex < pending.count, visited < 2_048 {
+            let current = pending[nextIndex]
+            nextIndex += 1
             visited += 1
+            let element = current.element
             if let rect = axRect(element), isPlausibleVSCodeTerminalRect(rect, inside: windowRect) {
                 let fillsWindow = windowRect.map {
                     rect.width >= $0.width * 0.98 && rect.height >= $0.height * 0.84
                 } ?? false
                 if !fillsWindow {
-                    if firstViewport == nil { firstViewport = rect }
-                    let label = [
-                        kAXTitleAttribute as String,
-                        kAXDescriptionAttribute as String,
-                        kAXHelpAttribute as String,
-                        kAXIdentifierAttribute as String
-                    ].compactMap { axStringAttribute($0, from: element) }
-                        .joined(separator: " ")
-                        .lowercased()
+                    let label = vscodeAccessibilityLabel(for: element)
                     if label.contains("terminal") { return rect }
                 }
             }
 
-            var parentValue: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentValue) == .success,
-                  let parentValue else { break }
-            element = unsafeBitCast(parentValue, to: AXUIElement.self)
+            guard current.depth < 14 else { continue }
+            var childrenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+               let children = childrenValue as? [AXUIElement] {
+                pending.append(contentsOf: children.map { ($0, current.depth + 1) })
+            }
         }
-        return firstViewport
+
+        // The native shell bridge can still provide completions when VS
+        // Code's AX tree is unavailable. Give the popup a bounded terminal
+        // area near the bottom of the editor window rather than hiding it.
+        // This is only a last resort; live caret, DSR, and discovered AX
+        // viewport coordinates take precedence above.
+        guard let windowRect,
+              isPlausibleVSCodeTerminalRect(windowRect, inside: nil) else { return nil }
+        let horizontalInset = min(12, windowRect.width * 0.02)
+        let top = windowRect.minY + windowRect.height * 0.58
+        let bottom = windowRect.maxY - min(12, windowRect.height * 0.02)
+        guard bottom - top >= 80 else { return nil }
+        return CGRect(
+            x: windowRect.minX + horizontalInset,
+            y: top,
+            width: windowRect.width - horizontalInset * 2,
+            height: bottom - top
+        )
+    }
+
+    private func vscodeAccessibilityLabel(for element: AXUIElement) -> String {
+        [
+            kAXTitleAttribute as String,
+            kAXDescriptionAttribute as String,
+            kAXHelpAttribute as String,
+            kAXIdentifierAttribute as String
+        ].compactMap { axStringAttribute($0, from: element) }
+            .joined(separator: " ")
+            .lowercased()
     }
 
     private func isPlausibleVSCodeTerminalRect(_ rect: CGRect, inside windowRect: CGRect?) -> Bool {
@@ -1571,7 +1663,8 @@ final class CueService {
                 }
                 let terminal = AXUIElementCreateApplication(frontmostApplication.processIdentifier)
                 var windowsValue: CFTypeRef?
-                if AXUIElementCopyAttributeValue(terminal, kAXWindowsAttribute as CFString, &windowsValue) == .success,
+                if !TerminalHost.isVSCode(frontmostApplication.bundleIdentifier),
+                   AXUIElementCopyAttributeValue(terminal, kAXWindowsAttribute as CFString, &windowsValue) == .success,
                    let windows = windowsValue as? [AXUIElement], windows.isEmpty {
                     self.panelController.hide()
                 }
@@ -1579,7 +1672,7 @@ final class CueService {
                 if self.panelController.isVisible,
                    let previous = self.previousTerminalWindow,
                    let currentWindow,
-                   (previous.id != currentWindow.id || previous.frame != currentWindow.frame) {
+                   (previous.id != currentWindow.id || !self.terminalWindowFramesMatch(previous.frame, currentWindow.frame)) {
                     self.panelController.hide()
                 }
                 self.previousTerminalWindow = currentWindow
@@ -1601,6 +1694,14 @@ final class CueService {
             return (id, frame)
         }
         return nil
+    }
+
+    private func terminalWindowFramesMatch(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        let tolerance: CGFloat = 2
+        return abs(lhs.origin.x - rhs.origin.x) <= tolerance &&
+            abs(lhs.origin.y - rhs.origin.y) <= tolerance &&
+            abs(lhs.width - rhs.width) <= tolerance &&
+            abs(lhs.height - rhs.height) <= tolerance
     }
 
     private func startWorker() {
