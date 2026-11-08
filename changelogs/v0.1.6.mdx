@@ -1,0 +1,20 @@
+---
+title: Cue 0.1.6
+description: Restore VS Code terminal suggestions and improve Enter-key behavior.
+version: "0.1.6"
+date: "2026-11-08"
+---
+
+## Added
+
+- Nothing new in this release.
+
+## Changed
+
+- Use the VS Code integrated terminal's live accessibility caret to anchor suggestions when terminal cursor reports are unavailable.
+- Credit and thanks to [@chaw678](https://github.com/chaw678) for reporting the VS Code issue with detailed environment and reproduction steps.
+- Include the first-Enter fix contributed by [@franndeli](https://github.com/franndeli) in [PR #4](https://github.com/8starlabs/cue/pull/4): pressing Enter on an unchanged suggestion now executes it on the first press.
+
+## Fixed
+
+- Suggestions no longer disappear in VS Code's integrated terminal solely because its shell did not return a terminal cursor-row report.

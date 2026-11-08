@@ -761,9 +761,11 @@ final class CuePanelController {
         var caretAnchorX: CGFloat?
         var belowCaretY: CGFloat?
         var aboveCaretY: CGFloat?
-        if !isVSCode, let caret = accessibilityCaret {
-            // Use Terminal's live caret bounds as the source of truth. The
-            // terminal grid estimate can be vertically offset when Terminal
+        if let caret = accessibilityCaret {
+            // Prefer the active terminal's live Accessibility caret. VS Code's
+            // integrated terminal may not return a DSR cursor row to the shell,
+            // so its insertion point is the only reliable anchor when available.
+            // The terminal grid estimate can be vertically offset when Terminal
             // adds chrome such as its tab strip (notably after Cmd+T), because
             // AX may expose the text area and tab group differently across
             // windows. The selected-text range already accounts for the
