@@ -1,9 +1,9 @@
 class Cue < Formula
   desc "IDE-style suggestions for Apple Terminal and VS Code"
   homepage "https://github.com/8starlabs/cue"
-  url "https://github.com/8starlabs/cue/releases/download/v0.1.8/cue-0.1.8-macos-arm64.tar.gz"
-  version "0.1.8"
-  sha256 "772fbef2d63ab18941549d44ed0686268094ab260516c6e6a9652524e525a3b3"
+  url "https://github.com/8starlabs/cue/releases/download/v0.1.9/cue-0.1.9-macos-arm64.tar.gz"
+  version "0.1.9"
+  sha256 "bbdc554d3723961ffde9c314f36349e6b50445890fd6f40a5a094e82520fc88a"
 
   depends_on macos: :ventura
   depends_on arch: :arm64
@@ -26,6 +26,9 @@ class Cue < Formula
 
       Open a new zsh session in Apple Terminal or the VS Code integrated terminal.
       In VS Code, choose zsh with Terminal: Select Default Profile if needed.
+
+      After setup, use cue-update from zsh to upgrade Cue and refresh the current
+      shell. See the update guide for the first upgrade from an earlier release.
     EOS
   end
 end

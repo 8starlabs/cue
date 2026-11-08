@@ -54,6 +54,6 @@ pnpm install
 pnpm build:app
 ```
 
-Open a new Terminal session after rebuilding. If Cue is running, open Activity Monitor, select Cue, click the stop button, and choose **Quit** so the new session launches the updated app.
+When the build runs in Apple Terminal or the VS Code integrated terminal, it stops Cue app and worker processes for your account, clears the stale socket, and starts the local build. The same zsh session can use the rebuilt app immediately.
 
 To uninstall, remove Cue's `source` line from `~/.zshrc`, quit Cue if it is running, close existing Terminal windows, and delete your clone. Cue cleans up its temporary socket files when it starts again. You can also remove Cue from Accessibility settings. See [Install Cue](/docs/install/install-cue) if you prefer the Homebrew version.

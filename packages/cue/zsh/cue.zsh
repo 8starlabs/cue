@@ -1,7 +1,15 @@
 # Cue's zsh bridge. Source this after compinit and other completion plugins.
 
-# Resolve the project from this file so widgets keep working in fresh shells.
-typeset -g CUE_HOME="${CUE_HOME:-${${(%):-%N}:A:h:h}}"
+# Resolve the project from this file while preserving Homebrew's stable opt
+# symlink. Physical paths under the versioned Cellar become stale on upgrade.
+typeset -g CUE_HOME_AUTO_VALUE="${CUE_HOME_AUTO_VALUE:-}"
+if [[ -z "${CUE_HOME:-}" || "$CUE_HOME" == "$CUE_HOME_AUTO_VALUE" || "$CUE_HOME" == */Cellar/cue/*/share/cue ]]; then
+  CUE_HOME="${${(%):-%N}:a:h:h}"
+  CUE_HOME_AUTO_VALUE="$CUE_HOME"
+else
+  CUE_HOME_AUTO_VALUE=''
+fi
+typeset -g CUE_HOME CUE_HOME_AUTO_VALUE
 # Older setup instructions exported the repository root as CUE_HOME. In the
 # monorepo, the runtime and app bundle live under packages/cue instead.
 if [[ -d "${CUE_HOME}/packages/cue" && -f "${CUE_HOME}/packages/cue/package.json" ]]; then
@@ -550,3 +558,23 @@ add-zsh-hook precmd _cue_measure_prompt
 if [[ -d "${CUE_HOME:-$HOME/Applications/Cue}/build/Cue.app" ]]; then
   /usr/bin/open -ga "${CUE_HOME:-$HOME/Applications/Cue}/build/Cue.app" >/dev/null 2>&1
 fi
+
+# Upgrade Cue from the current shell, then reload this integration through the
+# stable Homebrew opt path so the shell and app move to the same release.
+cue-update() {
+  command brew update || return
+  command brew upgrade 8starlabs/cue/cue || return
+
+  local brew_prefix cue_app cleanup
+  brew_prefix="$(command brew --prefix)" || return
+  cue_app="$brew_prefix/opt/cue/Cue.app"
+  cleanup="$cue_app/Contents/Resources/CueRuntime/bin/stop-cue-processes.sh"
+  if [[ ! -x "$cleanup" ]]; then
+    print -u2 -- "Cue update helper is missing. Reinstall Cue with Homebrew, then retry."
+    return 1
+  fi
+  "$cleanup" --stop || return
+
+  unset CUE_HOME CUE_HOME_AUTO_VALUE
+  source "$brew_prefix/opt/cue/share/cue/zsh/cue.zsh"
+}

@@ -1,0 +1,14 @@
+---
+title: Cue 0.1.9
+description: Make Homebrew upgrades restart Cue cleanly for the current user.
+version: "0.1.9"
+date: "2026-11-09"
+---
+
+## Added
+
+- Add `cue-update` to update Homebrew and Cue, stop stale app and worker processes for the current user, clear the stale socket, and reload the updated integration in the current shell.
+
+## Fixed
+
+- Keep Homebrew's stable `opt/cue` path in zsh so open terminals can refresh Cue after an upgrade without retaining a deleted Cellar path.

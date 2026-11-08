@@ -29,6 +29,8 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
 
    Open a new Apple Terminal window or create a new VS Code integrated terminal. In VS Code, make sure the terminal profile is zsh: open the Command Palette, choose **Terminal: Select Default Profile**, select **zsh**, then create a new terminal.
 
+   After setup, run `cue-update` from zsh to upgrade Cue and refresh the current shell. See the [update guide](https://cue.8starlabs.com/docs/install/update) for the first update from an older release.
+
 2. **Build from source**
 
    Requires Node.js 22+, pnpm 10+, and Xcode Command Line Tools.

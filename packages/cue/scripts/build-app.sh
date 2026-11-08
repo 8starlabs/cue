@@ -18,7 +18,8 @@ cp -R "$ROOT/node_modules/@withfig/autocomplete/icons" "$APP/Contents/Resources/
 cp "$ROOT/node_modules/@withfig/autocomplete/LICENSE" "$APP/Contents/Resources/FigIcons/LICENSE"
 mkdir -p "$APP/Contents/Resources/MaterialIconTheme"
 cp -R "$ROOT/native/Resources/MaterialIconTheme/"* "$APP/Contents/Resources/MaterialIconTheme/"
-mkdir -p "$RUNTIME/dist" "$RUNTIME/node_modules/@withfig"
+mkdir -p "$RUNTIME/bin" "$RUNTIME/dist" "$RUNTIME/node_modules/@withfig"
+cp "$ROOT/scripts/stop-cue-processes.sh" "$RUNTIME/bin/stop-cue-processes.sh"
 cp -R "$ROOT/dist/" "$RUNTIME/dist/"
 cp -RL "$ROOT/node_modules/@withfig/autocomplete" "$RUNTIME/node_modules/@withfig/autocomplete"
 cp -RL "$ROOT/node_modules/shell-quote" "$RUNTIME/node_modules/shell-quote"
@@ -54,16 +55,11 @@ else
     --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP"
 fi
 
-# When building interactively from Apple Terminal, replace the running app so
-# the next completion uses this build. Keep non-interactive/package builds free
-# of GUI side effects.
-if [[ "${TERM_PROGRAM:-}" == "Apple_Terminal" && "${CUE_RELEASE_BUILD:-0}" != "1" ]]; then
-  /usr/bin/pkill -TERM -x Cue 2>/dev/null || true
-  for _ in {1..20}; do
-    /usr/bin/pgrep -x Cue >/dev/null || break
-    sleep 0.1
-  done
-  /usr/bin/open -ga "$APP"
+# When building interactively in a supported terminal, stop Cue apps and
+# workers owned by this user, then start the build just created. Package builds
+# stay free of GUI side effects.
+if [[ "${TERM_PROGRAM:-}" =~ ^(Apple_Terminal|vscode)$ && "${CUE_RELEASE_BUILD:-0}" != "1" ]]; then
+  "$RUNTIME/bin/stop-cue-processes.sh" --restart "$APP"
 fi
 
 echo "Built $APP"

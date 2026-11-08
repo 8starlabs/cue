@@ -24,6 +24,7 @@ Run commands from the repository root with pnpm:
 - Cue currently targets Apple Silicon Macs running macOS 13 or later, using zsh in Apple Terminal or the VS Code integrated terminal.
 - Keep the native popup non-activating so the terminal retains keyboard focus.
 - The shell bridge and native socket packet fields must stay in sync.
+- Keep app and worker cleanup scoped to the current macOS user, and never remove the instance lock file while a Cue process may hold it.
 - Directory completion for `cd` must stay directory-only. Do not show stale popup rows when the current query has no results.
 - Enter, Tab, Escape, and arrow-key behavior is implemented in `packages/cue/zsh/cue.zsh`; preserve the documented flow when changing it.
 - Keep Fig attribution and its MIT license with redistributed specs and icons.

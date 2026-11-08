@@ -9,3 +9,5 @@ The published tap formula stays in `Formula/cue.rb` in this repository; no separ
 5. Verify the install on a clean Apple Silicon Mac with `brew tap 8starlabs/cue https://github.com/8starlabs/cue.git` followed by `brew install 8starlabs/cue/cue`.
 
 The current formula targets Apple Silicon macOS. The release archive keeps the Fig catalog once inside `Cue.app`; the formula symlinks `share/cue/node_modules` to that embedded copy so the zsh CLI and app worker share it. Node.js remains a Homebrew dependency for Cue's JavaScript completion worker.
+
+The zsh integration provides `cue-update`, which runs `brew update` and `brew upgrade`, then uses the helper bundled in `Cue.app` to stop Cue app and worker processes for the current user and clear its stale socket and cache. It reloads the integration in the current shell to launch the updated app. The helper must not remove the instance lock file or signal processes belonging to another macOS user.

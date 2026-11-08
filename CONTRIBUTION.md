@@ -24,7 +24,7 @@ The docs site loads Google Tag Manager when `NEXT_PUBLIC_GTM_ID` is set. Copy `a
 
 ## Develop alongside the Homebrew install
 
-You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue currently supports one running instance at a time because both builds use the same process name and socket. When run from Apple Terminal, the build script stops the running Cue process and opens the local build. When run from VS Code, it builds the app but does not relaunch it; quit the running Cue app and start a new integrated zsh terminal to use the rebuilt version.
+You can keep the Homebrew version installed while developing. `pnpm build:app` writes the development app to `packages/cue/build/Cue.app`; it does not replace Homebrew's installed files. Cue uses one app and socket per macOS user. In Apple Terminal or VS Code, the build script stops that user's Cue app and worker processes, clears the stale socket, and opens the local build. It does not stop Cue processes belonging to other macOS accounts.
 
 From the repository root in Terminal, point Cue at the local package, load its zsh integration, and build the app:
 
@@ -34,7 +34,7 @@ source "$CUE_HOME/zsh/cue.zsh"
 pnpm build:app
 ```
 
-To return to the Homebrew version, quit the local app and open a new Terminal window whose zsh configuration sources the Homebrew-installed integration. Running the development and Homebrew apps simultaneously requires a separate development app identity and socket; Cue does not support that yet.
+To return to the Homebrew version, open a new zsh session whose configuration sources the Homebrew-installed integration. Running the development and Homebrew apps simultaneously requires a separate development app identity and socket; Cue does not support that yet.
 
 ## Check your changes
 
