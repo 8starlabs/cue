@@ -12,38 +12,48 @@ Cue is for people who miss Fig's autocomplete. I loved Fig before [Amazon acquir
 
 ## Install
 
-1. **Install with [Homebrew](https://brew.sh)**
+### With Homebrew
 
-   Add Cue's tap, then install it:
+Add Cue's tap and install the package:
 
-   ```sh
-   brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
-   brew install 8starlabs/cue/cue
-   ```
+```sh
+brew tap 8starlabs/cue https://github.com/8starlabs/cue.git
+brew install 8starlabs/cue/cue
+```
 
-   Enable Cue in zsh by adding its startup command to `~/.zshrc`:
+Enable Cue in zsh by adding its startup command to `~/.zshrc`:
 
-   ```sh
-   echo 'source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"' >> ~/.zshrc
-   ```
+```sh
+echo 'source "$(brew --prefix)/opt/cue/share/cue/zsh/cue.zsh"' >> ~/.zshrc
+```
 
-   Open a new Apple Terminal window or create a new VS Code integrated terminal. In VS Code, make sure the terminal profile is zsh: open the Command Palette, choose **Terminal: Select Default Profile**, select **zsh**, then create a new terminal.
+Open a new Apple Terminal window or create a new VS Code integrated terminal. In VS Code, choose **Terminal: Select Default Profile**, select **zsh**, and create a new terminal.
 
-   After setup, run `cue-update` from zsh to upgrade Cue and refresh the current shell. See the [update guide](https://cue.8starlabs.com/docs/install/update) for the first update from an older release.
+macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility** so its popup can follow the terminal caret.
 
-2. **Build from source**
+### From source
 
-   Requires Node.js 22+, pnpm 10+, and Xcode Command Line Tools.
+Building from source requires Node.js 22+, pnpm 10+, and Xcode Command Line Tools.
 
-   ```sh
-   git clone https://github.com/8starlabs/cue.git
-   cd cue
-   pnpm install
-   pnpm build:app
-   source "$PWD/packages/cue/zsh/cue.zsh"
-   ```
+```sh
+git clone https://github.com/8starlabs/cue.git
+cd cue
+pnpm install
+pnpm build:app
+source "$PWD/packages/cue/zsh/cue.zsh"
+```
 
-For either installation method, macOS may ask you to allow Cue under **System Settings → Privacy & Security → Accessibility** so the popup can follow the terminal caret. See the [installation guide](https://cue.8starlabs.com/docs/install/install-cue) for setup details, updates, and removal.
+See the [installation guide](https://cue.8starlabs.com/docs/install/install-cue) for more setup details.
+
+## Update
+
+For Homebrew installations, run `cue-update` in zsh:
+
+```sh
+cue-update
+```
+
+This updates Homebrew and Cue, restarts Cue, and refreshes the integration in the current terminal. For the one-time update from Cue 0.1.8 or earlier, follow the [update guide](https://cue.8starlabs.com/docs/install/update).
 
 ## See Cue in action
 
